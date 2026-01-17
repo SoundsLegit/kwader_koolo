@@ -248,8 +248,6 @@ func (s Javazon) killMonsterSequenceSafe(
 	previousUnitID := 0
 	const numOfAttacks = 5
 
-	ctx := context.Get()
-
 	for {
 		context.Get().PauseIfNotPriority()
 
@@ -292,12 +290,7 @@ func (s Javazon) killMonsterSequenceSafe(
 		if closePackMonsters >= 8 {
 			step.SecondaryAttack(skill.LightningFury, id, numOfAttacks, step.Distance(minJavazonDistance, maxJavazonDistance))
 		} else {
-			csKey, found := s.Data.KeyBindings.KeyBindingForSkill(skill.LightningStrike)
-			if found && s.Data.PlayerUnit.RightSkill != skill.LightningStrike {
-				ctx.HID.PressKeyBinding(csKey)
-				utils.Sleep(jzDkMinSkillSwapDelayMS)
-			}
-			step.PrimaryAttack(id, numOfAttacks, false, step.Distance(1, 1))
+			step.SecondaryAttack(skill.LightningStrike, id, numOfAttacks, step.Distance(0, meleeRange))
 		}
 
 		completedAttackLoops++
@@ -638,7 +631,7 @@ func (s Javazon) KillBossSequence(
 				s.chargedStrike(id)
 			}
 		} else {
-			step.PrimaryAttack(id, numOfAttacks, false, step.Distance(1, 1))
+			step.PrimaryAttack(id, numOfAttacks, false, step.Distance(1, meleeRange))
 		}
 
 		completedAttackLoops++
