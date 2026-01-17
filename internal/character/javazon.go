@@ -214,7 +214,7 @@ func (s Javazon) ShouldIgnoreMonster(m data.Monster) bool {
 }
 
 func (s Javazon) CheckKeyBindings() []skill.ID {
-	requireKeybindings := []skill.ID{skill.ChargedStrike, skill.LightningStrike, skill.LightningFury, skill.TomeOfTownPortal}
+	requireKeybindings := []skill.ID{skill.LightningStrike, skill.LightningFury, skill.TomeOfTownPortal}
 	missingKeybindings := []skill.ID{}
 
 	for _, cskill := range requireKeybindings {
