@@ -1,6 +1,8 @@
 @echo off
 setlocal enabledelayedexpansion
 
+@REM small test
+
 :: Set current directory to script location
 cd /d "%~dp0"
 
