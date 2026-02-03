@@ -38,6 +38,63 @@ func (pf *PathFinder) SetPacketSender(ps *game.PacketSender) {
 	pf.packetSender = ps
 }
 
+func (pf *PathFinder) IsObstacleBetween(from, to data.Position) bool {
+	a := pf.data.AreaData
+
+	dx := to.X - from.X
+	dy := to.Y - from.Y
+	steps := int(math.Max(math.Abs(float64(dx)), math.Abs(float64(dy))))
+	if steps == 0 {
+		return false
+	}
+
+	stepX := float64(dx) / float64(steps)
+	stepY := float64(dy) / float64(steps)
+
+	for i := 0; i <= steps; i++ {
+		x := from.X + int(float64(i)*stepX)
+		y := from.Y + int(float64(i)*stepY)
+		pos := data.Position{X: x, Y: y}
+
+		if !a.IsTeleportOver(pos) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func (pf *PathFinder) GetPositionPast(to data.Position) data.Position {
+	// Get my position
+	myPos := pf.data.PlayerUnit.Position
+
+	// Calculate direction vector
+	dirX := to.X - myPos.X
+	dirY := to.Y - myPos.Y
+
+	// Determine direction (\+1, 0, \-1\) for X and Y
+	stepX := 0
+	if dirX > 0 {
+		stepX = 1
+	} else if dirX < 0 {
+		stepX = -1
+	}
+	stepY := 0
+	if dirY > 0 {
+		stepY = 1
+	} else if dirY < 0 {
+		stepY = -1
+	}
+
+	// Move 4 units past `to` in the direction from myPos to `to`
+	newPos := data.Position{
+		X: to.X + stepX*4,
+		Y: to.Y + stepY*4,
+	}
+
+	return newPos
+}
+
 func (pf *PathFinder) GetPath(to data.Position) (Path, int, bool) {
 	// First try direct path
 	if path, distance, found := pf.GetPathFrom(pf.data.PlayerUnit.Position, to); found {
@@ -174,6 +231,102 @@ func (pf *PathFinder) GetPathFrom(from, to data.Position) (Path, int, bool) {
 		pf.renderMap(grid, from, to, path)
 	}
 
+	if pf.data.PlayerUnit.Area != area.ArcaneSanctuary && pf.data.CanTeleport() && found && len(path) > 1 {
+		// Remove or replace short teleports (<= 3) that try to teleport into invalid map terrain (not accessible)
+		newPath := make(Path, 0, len(path))
+		newPath = append(newPath, path[0])
+
+		isValidTeleportDest := func(pos data.Position) bool {
+			if pos.X < 0 || pos.Y < 0 || pos.X >= grid.Width || pos.Y >= grid.Height {
+				return false
+			}
+			ct := grid.Get(pos.X, pos.Y)
+			return ct == game.CollisionTypeWalkable || ct == game.CollisionTypeTeleportOver
+		}
+
+		// Helper: Bresenham's line algorithm to find last valid tile before invalid
+		findLastValid := func(from, to data.Position) data.Position {
+			x0, y0 := from.X, from.Y
+			x1, y1 := to.X, to.Y
+			dx := abs(x1 - x0)
+			dy := abs(y1 - y0)
+			sx := -1
+			if x0 < x1 {
+				sx = 1
+			}
+			sy := -1
+			if y0 < y1 {
+				sy = 1
+			}
+			err := dx - dy
+			lastValid := from
+			for {
+				pos := data.Position{X: x0, Y: y0}
+				if !isValidTeleportDest(pos) {
+					break
+				}
+				lastValid = pos
+				if x0 == x1 && y0 == y1 {
+					break
+				}
+				e2 := 2 * err
+				if e2 > -dy {
+					err -= dy
+					x0 += sx
+				}
+				if e2 < dx {
+					err += dx
+					y0 += sy
+				}
+			}
+			return lastValid
+		}
+
+		for i := 1; i < len(path); i++ {
+			p1 := path[i-1]
+			p2 := path[i]
+
+			dx := p2.X - p1.X
+			if dx < 0 {
+				dx = -dx
+			}
+			dy := p2.Y - p1.Y
+			if dy < 0 {
+				dy = -dy
+			}
+			cheb := dx
+			if dy > cheb {
+				cheb = dy
+			}
+
+			if cheb <= 3 {
+				if !isValidTeleportDest(p2) {
+					lastValid := findLastValid(p1, p2)
+					// Only add if not the same as p1 and not already in path
+					if (lastValid.X != p1.X || lastValid.Y != p1.Y) && (len(newPath) == 0 || lastValid != newPath[len(newPath)-1]) {
+						// Ensure lastValid is in the correct direction (between p1 and p2)
+						d1 := (p2.X-p1.X)*(lastValid.X-p1.X) + (p2.Y-p1.Y)*(lastValid.Y-p1.Y)
+						d2 := (p2.X-p1.X)*(p2.X-p1.X) + (p2.Y-p1.Y)*(p2.Y-p1.Y)
+						// d1 >= 0 ensures lastValid is not behind p1, d1 <= d2 ensures it's not past p2
+						if d1 >= 0 && d1 <= d2 {
+							// Also ensure lastValid is closer to p2 than p1 is
+							distP1P2 := (p2.X-p1.X)*(p2.X-p1.X) + (p2.Y-p1.Y)*(p2.Y-p1.Y)
+							distLastValidP2 := (p2.X-lastValid.X)*(p2.X-lastValid.X) + (p2.Y-lastValid.Y)*(p2.Y-lastValid.Y)
+							if distLastValidP2 < distP1P2 {
+								newPath = append(newPath, lastValid)
+							}
+						}
+					}
+					continue // skip original invalid step
+				}
+			}
+
+			newPath = append(newPath, p2)
+		}
+
+		path = newPath
+	}
+
 	return path, distance, found
 }
 
@@ -286,4 +439,12 @@ func (pf *PathFinder) findNearbyWalkablePositionInGrid(grid *game.Grid, target d
 func (pf *PathFinder) findNearbyWalkablePosition(target data.Position) (data.Position, bool) {
 
 	return pf.findNearbyWalkablePositionInGrid(pf.data.AreaData.Grid, target)
+}
+
+// Helper for abs
+func abs(x int) int {
+	if x < 0 {
+		return -x
+	}
+	return x
 }

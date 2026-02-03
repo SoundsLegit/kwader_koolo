@@ -214,6 +214,19 @@ outer:
 			// Calculate position to move to based on attempt number
 			pickupPosition := itemToPickup.Position
 			moveDistance := 3
+
+			// Check for obstacles when teleporting (before calculating alternative positions)
+			if ctx.Data.CanTeleport() && attempt == 1 {
+				if ctx.PathFinder.IsObstacleBetween(ctx.Data.PlayerUnit.Position, itemToPickup.Position) {
+					// There's an obstacle between us and the item
+					// Try to move past the item to bypass the obstacle
+					if debugPickit {
+						ctx.Logger.Debug("Item Pickup: Obstacle detected between player and item, moving past item")
+					}
+					pickupPosition = ctx.PathFinder.GetPositionPast(itemToPickup.Position)
+				}
+			}
+
 			if attempt > 1 {
 				switch attempt {
 				case 2:

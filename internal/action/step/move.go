@@ -3,6 +3,7 @@ package step
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"time"
 
@@ -138,12 +139,12 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 	var walkDuration time.Duration
 	if !ctx.Data.AreaData.Area.IsTown() {
 		// In dungeons: faster refresh for combat
-		baseMin, baseMax := 300, 350
+		baseMin, baseMax := 300, 400
 		pingAdjustment := int(float64(ctx.Data.Game.Ping) * 0.5) // Add half ping to base
 		walkDuration = utils.RandomDurationMs(baseMin+pingAdjustment, baseMax+pingAdjustment)
 	} else {
-		// In town: moderately fast refresh to avoid getting stuck on obstacles
-		baseMin, baseMax := 350, 450
+		// In town: slower refresh is acceptable
+		baseMin, baseMax := 500, 800
 		pingAdjustment := int(float64(ctx.Data.Game.Ping) * 0.5)
 		walkDuration = utils.RandomDurationMs(baseMin+pingAdjustment, baseMax+pingAdjustment)
 	}
@@ -153,6 +154,8 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 	clearPathDist := ctx.CharacterCfg.Character.ClearPathDist
 	overrideClearPathDist := false
 	blocked := false
+	obstacleBypassAttempts := 0
+	const maxObstacleBypassAttempts = 3
 	if opts.ClearPathOverride() != nil {
 		clearPathDist = *opts.ClearPathOverride()
 		overrideClearPathDist = true
@@ -194,6 +197,33 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 
 		//Compute distance to destination
 		currentDistanceToDest := ctx.PathFinder.DistanceFromMe(currentDest)
+
+		// Check for obstacles when teleporting and close to destination (BEFORE returning)
+		if ctx.Data.CanTeleport() && currentDistanceToDest <= minDistanceToFinishMoving && obstacleBypassAttempts < maxObstacleBypassAttempts {
+			isObstacle := ctx.PathFinder.IsObstacleBetween(ctx.Data.PlayerUnit.Position, currentDest)
+			if isObstacle {
+				obstacleBypassAttempts++
+				// Move just past the position to bypass the obstacle
+				ctx.Logger.Debug("Object is not walkable, moving past it",
+					slog.Int("attempt", obstacleBypassAttempts),
+					slog.Int("distance", currentDistanceToDest))
+				movePastPos := ctx.PathFinder.GetPositionPast(currentDest)
+
+				// Convert to grid-relative coordinates for MoveThroughPath
+				areaOrigin := ctx.Data.AreaOrigin
+				movePastGridPos := data.Position{
+					X: movePastPos.X - areaOrigin.X,
+					Y: movePastPos.Y - areaOrigin.Y,
+				}
+
+				// Try to move past the obstacle
+				ctx.PathFinder.MoveThroughPath([]data.Position{movePastGridPos}, walkDuration)
+				utils.Sleep(100)
+
+				// Continue to next iteration to re-evaluate position
+				continue
+			}
+		}
 
 		//We've reached the destination, stop movement
 		if currentDistanceToDest <= minDistanceToFinishMoving {
@@ -360,8 +390,97 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 			return nil
 		}
 
+		// When teleporting, validate only the next few steps ahead for obstacles
+		// Checking the entire path is inefficient and unnecessary since we recalculate frequently
+		if ctx.Data.CanTeleport() && len(path) > 1 {
+			playerPos := ctx.Data.PlayerUnit.Position
+			areaOrigin := ctx.Data.AreaOrigin
+
+			// Only check the next 10 path segments (or less if path is shorter)
+			// This is efficient and sufficient since teleport moves quickly and recalculates often
+			maxSegmentsToCheck := 10
+			if maxSegmentsToCheck > len(path) {
+				maxSegmentsToCheck = len(path)
+			}
+
+			validPathIndex := -1
+			lastValidIndex := -1
+
+			// Start by checking if we can reach the first path point from current position
+			currentCheckPos := playerPos
+
+			for i := 0; i < maxSegmentsToCheck; i++ {
+				pathPoint := path[i]
+				// Convert path coordinates (grid-relative) to world coordinates
+				pathWorldPos := data.Position{
+					X: pathPoint.X + areaOrigin.X,
+					Y: pathPoint.Y + areaOrigin.Y,
+				}
+
+				// Check if we can teleport to this point from the last valid position
+				if !ctx.PathFinder.IsObstacleBetween(currentCheckPos, pathWorldPos) {
+					lastValidIndex = i
+					// Update reference position for next segment check
+					currentCheckPos = pathWorldPos
+				} else {
+					// Found an obstacle in the path, stop checking further segments
+					break
+				}
+			}
+
+			// If we found any valid points, use the furthest one we can reach
+			if lastValidIndex >= 0 {
+				// Check if there are invalid points we're skipping (within our checked range)
+				if lastValidIndex < maxSegmentsToCheck-1 && lastValidIndex < len(path)-1 {
+					// There are blocked points after our last valid point
+					// Check if we can reach the destination directly from the last valid point
+					lastValidWorldPos := data.Position{
+						X: path[lastValidIndex].X + areaOrigin.X,
+						Y: path[lastValidIndex].Y + areaOrigin.Y,
+					}
+
+					if !ctx.PathFinder.IsObstacleBetween(lastValidWorldPos, currentDest) {
+						ctx.Logger.Debug("Path has obstacles but destination is reachable, truncating path",
+							slog.Int("originalPathLength", len(path)),
+							slog.Int("truncatedToIndex", lastValidIndex))
+						// We can reach destination from this point, truncate the path
+						path = path[:lastValidIndex+1]
+					} else {
+						// Destination not directly reachable, skip to furthest valid point
+						ctx.Logger.Debug("Skipping blocked path segments",
+							slog.Int("skippedPoints", lastValidIndex),
+							slog.Int("remainingPath", len(path)-lastValidIndex))
+						validPathIndex = lastValidIndex
+					}
+				}
+			} else {
+				// No valid points found in the checked segments - immediate path is blocked
+				ctx.Logger.Debug("Immediate path is blocked by obstacles, attempting bypass",
+					slog.Int("distance", currentDistanceToDest))
+
+				// Try to move to a position that bypasses the obstacle
+				movePastPos := ctx.PathFinder.GetPositionPast(currentDest)
+				// Convert to grid-relative coordinates for MoveThroughPath
+				movePastGridPos := data.Position{
+					X: movePastPos.X - areaOrigin.X,
+					Y: movePastPos.Y - areaOrigin.Y,
+				}
+				ctx.PathFinder.MoveThroughPath([]data.Position{movePastGridPos}, walkDuration)
+				utils.Sleep(100)
+				continue
+			}
+
+			// If we need to skip to a valid starting point in the path
+			if validPathIndex > 0 {
+				path = path[validPathIndex:]
+			}
+		}
+
 		//Update values
 		lastRun = time.Now()
+		if previousPosition != ctx.Data.PlayerUnit.Position {
+			obstacleBypassAttempts = 0 // Reset counter when player successfully moves
+		}
 		previousPosition = ctx.Data.PlayerUnit.Position
 
 		//Perform the movement
