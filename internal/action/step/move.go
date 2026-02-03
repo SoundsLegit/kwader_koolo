@@ -216,6 +216,13 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 					Y: movePastPos.Y - areaOrigin.Y,
 				}
 
+				// Update values before movement to maintain stuck detection
+				lastRun = time.Now()
+				if previousPosition != ctx.Data.PlayerUnit.Position {
+					obstacleBypassAttempts = 0 // Reset counter when player successfully moves
+				}
+				previousPosition = ctx.Data.PlayerUnit.Position
+
 				// Try to move past the obstacle
 				ctx.PathFinder.MoveThroughPath([]data.Position{movePastGridPos}, walkDuration)
 				utils.Sleep(100)
@@ -465,6 +472,14 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 					X: movePastPos.X - areaOrigin.X,
 					Y: movePastPos.Y - areaOrigin.Y,
 				}
+
+				// Update values before movement to maintain stuck detection
+				lastRun = time.Now()
+				if previousPosition != ctx.Data.PlayerUnit.Position {
+					obstacleBypassAttempts = 0 // Reset counter when player successfully moves
+				}
+				previousPosition = ctx.Data.PlayerUnit.Position
+
 				ctx.PathFinder.MoveThroughPath([]data.Position{movePastGridPos}, walkDuration)
 				utils.Sleep(100)
 				continue
