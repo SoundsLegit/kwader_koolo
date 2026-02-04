@@ -24,7 +24,7 @@ type Grid struct {
 	CollisionGrid []CollisionType // flat 1D array: index = y*Width + x
 }
 
-func (g *Grid) IsTeleportOver(p data.Position) bool {
+func (g *Grid) CanTeleportTo(p data.Position) bool {
 	p = g.RelativePosition(p)
 	if p.X < 0 || p.X >= g.Width || p.Y < 0 || p.Y >= g.Height {
 		return false

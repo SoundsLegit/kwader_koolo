@@ -145,7 +145,7 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 		walkDuration = utils.RandomDurationMs(baseMin+pingAdjustment, baseMax+pingAdjustment)
 	} else {
 		// In town: slower refresh is acceptable
-		baseMin, baseMax := 500, 800
+		baseMin, baseMax := 400, 600
 		pingAdjustment := int(float64(ctx.Data.Game.Ping) * 0.5)
 		walkDuration = utils.RandomDurationMs(baseMin+pingAdjustment, baseMax+pingAdjustment)
 	}

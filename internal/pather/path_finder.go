@@ -10,6 +10,7 @@ import (
 	"github.com/hectorgimenez/koolo/internal/config"
 	"github.com/hectorgimenez/koolo/internal/game"
 	"github.com/hectorgimenez/koolo/internal/pather/astar"
+	"github.com/hectorgimenez/koolo/internal/utils"
 )
 
 type PathFinder struct {
@@ -41,23 +42,38 @@ func (pf *PathFinder) SetPacketSender(ps *game.PacketSender) {
 func (pf *PathFinder) IsObstacleBetween(from, to data.Position) bool {
 	a := pf.data.AreaData
 
-	dx := to.X - from.X
-	dy := to.Y - from.Y
-	steps := int(math.Max(math.Abs(float64(dx)), math.Abs(float64(dy))))
-	if steps == 0 {
-		return false
+	x0, y0 := from.X, from.Y
+	x1, y1 := to.X, to.Y
+	dx := utils.Abs(x1 - x0)
+	dy := utils.Abs(y1 - y0)
+	sx := -1
+	if x0 < x1 {
+		sx = 1
 	}
+	sy := -1
+	if y0 < y1 {
+		sy = 1
+	}
+	err := dx - dy
 
-	stepX := float64(dx) / float64(steps)
-	stepY := float64(dy) / float64(steps)
-
-	for i := 0; i <= steps; i++ {
-		x := from.X + int(float64(i)*stepX)
-		y := from.Y + int(float64(i)*stepY)
-		pos := data.Position{X: x, Y: y}
-
-		if !a.IsTeleportOver(pos) {
+	for {
+		pos := data.Position{X: x0, Y: y0}
+		if !a.CanTeleportTo(pos) {
 			return true
+		}
+
+		if x0 == x1 && y0 == y1 {
+			break
+		}
+
+		e2 := 2 * err
+		if e2 > -dy {
+			err -= dy
+			x0 += sx
+		}
+		if e2 < dx {
+			err += dx
+			y0 += sy
 		}
 	}
 
@@ -133,7 +149,7 @@ func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (
 		pos := data.Position{X: x, Y: y}
 
 		isWalkable := a.IsWalkable(pos)
-		isTeleportable := a.IsTeleportOver(pos)
+		isTeleportable := a.CanTeleportTo(pos)
 
 		// If we're in a walkable area and hit unwalkable (but teleportable), mark gap start
 		if inWalkable && !isWalkable && isTeleportable {
@@ -418,8 +434,8 @@ func (pf *PathFinder) GetPathFrom(from, to data.Position) (Path, int, bool) {
 		findLastValid := func(from, to data.Position) data.Position {
 			x0, y0 := from.X, from.Y
 			x1, y1 := to.X, to.Y
-			dx := abs(x1 - x0)
-			dy := abs(y1 - y0)
+			dx := utils.Abs(x1 - x0)
+			dy := utils.Abs(y1 - y0)
 			sx := -1
 			if x0 < x1 {
 				sx = 1
@@ -480,9 +496,8 @@ func (pf *PathFinder) GetPathFrom(from, to data.Position) (Path, int, bool) {
 						// d1 >= 0 ensures lastValid is not behind p1, d1 <= d2 ensures it's not past p2
 						if d1 >= 0 && d1 <= d2 {
 							// Also ensure lastValid is closer to p2 than p1 is
-							distP1P2 := (p2.X-p1.X)*(p2.X-p1.X) + (p2.Y-p1.Y)*(p2.Y-p1.Y)
 							distLastValidP2 := (p2.X-lastValid.X)*(p2.X-lastValid.X) + (p2.Y-lastValid.Y)*(p2.Y-lastValid.Y)
-							if distLastValidP2 < distP1P2 {
+							if distLastValidP2 < d2 {
 								newPath = append(newPath, lastValid)
 							}
 						}
@@ -609,12 +624,4 @@ func (pf *PathFinder) findNearbyWalkablePositionInGrid(grid *game.Grid, target d
 func (pf *PathFinder) findNearbyWalkablePosition(target data.Position) (data.Position, bool) {
 
 	return pf.findNearbyWalkablePositionInGrid(pf.data.AreaData.Grid, target)
-}
-
-// Helper for abs
-func abs(x int) int {
-	if x < 0 {
-		return -x
-	}
-	return x
 }
