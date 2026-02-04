@@ -95,6 +95,176 @@ func (pf *PathFinder) GetPositionPast(to data.Position) data.Position {
 	return newPos
 }
 
+// DetectGapAndGetTeleportPositions detects if there's a gap of unwalkable area between from and to,
+// and returns the optimal crossing point where the gap width is ≤10 units.
+// Searches both along the direct path and perpendicular to find the narrowest crossing.
+// Returns (beforeGap, afterGap, foundGap)
+func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (data.Position, data.Position, bool) {
+	a := pf.data.AreaData
+	maxTeleportGap := 10 // Maximum gap width that can be efficiently teleported
+
+	dx := to.X - from.X
+	dy := to.Y - from.Y
+	steps := int(math.Max(math.Abs(float64(dx)), math.Abs(float64(dy))))
+	if steps == 0 {
+		return data.Position{}, data.Position{}, false
+	}
+
+	stepX := float64(dx) / float64(steps)
+	stepY := float64(dy) / float64(steps)
+
+	// Track state as we move along the line and find all gaps
+	type gapInfo struct {
+		startIdx int
+		endIdx   int
+		midIdx   int
+		width    int
+		startPos data.Position
+		endPos   data.Position
+	}
+
+	var gaps []gapInfo
+	inWalkable := a.IsWalkable(from)
+	gapStart := -1
+
+	for i := 0; i <= steps; i++ {
+		x := from.X + int(float64(i)*stepX)
+		y := from.Y + int(float64(i)*stepY)
+		pos := data.Position{X: x, Y: y}
+
+		isWalkable := a.IsWalkable(pos)
+		isTeleportable := a.IsTeleportOver(pos)
+
+		// If we're in a walkable area and hit unwalkable (but teleportable), mark gap start
+		if inWalkable && !isWalkable && isTeleportable {
+			gapStart = i
+			inWalkable = false
+		}
+
+		// If we were in a gap and now we're back to walkable, record the gap
+		if !inWalkable && isWalkable && gapStart >= 0 {
+			gapWidth := i - gapStart
+			midIdx := (gapStart + i) / 2
+			gaps = append(gaps, gapInfo{
+				startIdx: gapStart,
+				endIdx:   i,
+				midIdx:   midIdx,
+				width:    gapWidth,
+				startPos: data.Position{
+					X: from.X + int(float64(gapStart)*stepX),
+					Y: from.Y + int(float64(gapStart)*stepY),
+				},
+				endPos: data.Position{
+					X: from.X + int(float64(i)*stepX),
+					Y: from.Y + int(float64(i)*stepY),
+				},
+			})
+			gapStart = -1
+			inWalkable = true
+		}
+
+		// If we hit a non-teleportable obstacle, no valid gap
+		if !isWalkable && !isTeleportable {
+			return data.Position{}, data.Position{}, false
+		}
+	}
+
+	if len(gaps) == 0 {
+		return data.Position{}, data.Position{}, false
+	}
+
+	// For each gap, search perpendicular to find narrower crossing points
+	type crossingPoint struct {
+		beforePos data.Position
+		afterPos  data.Position
+		width     int
+	}
+
+	var bestCrossing *crossingPoint
+
+	for _, gap := range gaps {
+		// Start with the direct crossing
+		if bestCrossing == nil || gap.width < bestCrossing.width {
+			beforeIdx := gap.startIdx - 1
+			if beforeIdx < 0 {
+				beforeIdx = 0
+			}
+			bestCrossing = &crossingPoint{
+				beforePos: data.Position{
+					X: from.X + int(float64(beforeIdx)*stepX),
+					Y: from.Y + int(float64(beforeIdx)*stepY),
+				},
+				afterPos: gap.endPos,
+				width:    gap.width,
+			}
+		}
+
+		// If already within acceptable range, no need to search further
+		if gap.width <= maxTeleportGap {
+			continue
+		}
+
+		// Search perpendicular to the main direction to find narrower crossings
+		// Calculate perpendicular direction (rotate 90 degrees)
+		perpX := -int(stepY)
+		perpY := int(stepX)
+		if perpX == 0 && perpY == 0 {
+			perpX = 1 // Fallback to horizontal search
+		}
+
+		// Search up to 20 units perpendicular in both directions
+		for offset := 1; offset <= 20; offset++ {
+			for _, dir := range []int{-1, 1} {
+				offsetX := perpX * offset * dir
+				offsetY := perpY * offset * dir
+
+				// Check crossing at this perpendicular offset
+				checkStart := data.Position{
+					X: gap.startPos.X + offsetX,
+					Y: gap.startPos.Y + offsetY,
+				}
+				checkEnd := data.Position{
+					X: gap.endPos.X + offsetX,
+					Y: gap.endPos.Y + offsetY,
+				}
+
+				// Verify both positions are walkable and inside area
+				if !a.IsInside(checkStart) || !a.IsInside(checkEnd) {
+					continue
+				}
+				if !a.IsWalkable(checkStart) || !a.IsWalkable(checkEnd) {
+					continue
+				}
+
+				// Measure the gap width at this position
+				gapWidthHere := int(math.Sqrt(float64((checkEnd.X-checkStart.X)*(checkEnd.X-checkStart.X) +
+					(checkEnd.Y-checkStart.Y)*(checkEnd.Y-checkStart.Y))))
+
+				// If this crossing is better (narrower), use it
+				if gapWidthHere < bestCrossing.width {
+					bestCrossing = &crossingPoint{
+						beforePos: checkStart,
+						afterPos:  checkEnd,
+						width:     gapWidthHere,
+					}
+
+					// If we found one within acceptable range, stop searching
+					if gapWidthHere <= maxTeleportGap {
+						goto foundOptimal
+					}
+				}
+			}
+		}
+	}
+
+foundOptimal:
+	if bestCrossing != nil {
+		return bestCrossing.beforePos, bestCrossing.afterPos, true
+	}
+
+	return data.Position{}, data.Position{}, false
+}
+
 func (pf *PathFinder) GetPath(to data.Position) (Path, int, bool) {
 	// First try direct path
 	if path, distance, found := pf.GetPathFrom(pf.data.PlayerUnit.Position, to); found {

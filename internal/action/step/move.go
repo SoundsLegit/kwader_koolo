@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strings"
 	"time"
 
@@ -154,8 +155,6 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 	clearPathDist := ctx.CharacterCfg.Character.ClearPathDist
 	overrideClearPathDist := false
 	blocked := false
-	obstacleBypassAttempts := 0
-	const maxObstacleBypassAttempts = 3
 	if opts.ClearPathOverride() != nil {
 		clearPathDist = *opts.ClearPathOverride()
 		overrideClearPathDist = true
@@ -198,42 +197,62 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 		//Compute distance to destination
 		currentDistanceToDest := ctx.PathFinder.DistanceFromMe(currentDest)
 
-		// Check for obstacles when teleporting and close to destination (BEFORE returning)
-		if ctx.Data.CanTeleport() && currentDistanceToDest <= minDistanceToFinishMoving && obstacleBypassAttempts < maxObstacleBypassAttempts {
-			isObstacle := ctx.PathFinder.IsObstacleBetween(ctx.Data.PlayerUnit.Position, currentDest)
-			if isObstacle {
-				obstacleBypassAttempts++
-				// Move just past the position to bypass the obstacle
-				ctx.Logger.Debug("Object is not walkable, moving past it",
-					slog.Int("attempt", obstacleBypassAttempts),
-					slog.Int("distance", currentDistanceToDest))
-				movePastPos := ctx.PathFinder.GetPositionPast(currentDest)
+		// Check for gaps when teleporting - handle by teleporting to edge of gap, then over it
+		if ctx.Data.CanTeleport() && currentDistanceToDest > minDistanceToFinishMoving {
+			if beforeGap, afterGap, foundGap := ctx.PathFinder.DetectGapAndGetTeleportPositions(ctx.Data.PlayerUnit.Position, currentDest); foundGap {
+				// Calculate distances to understand the gap
+				distToBeforeGap := ctx.PathFinder.DistanceFromMe(beforeGap)
+				distToAfterGap := ctx.PathFinder.DistanceFromMe(afterGap)
+				gapWidth := int(math.Sqrt(float64((afterGap.X-beforeGap.X)*(afterGap.X-beforeGap.X) +
+					(afterGap.Y-beforeGap.Y)*(afterGap.Y-beforeGap.Y))))
 
-				// Convert to grid-relative coordinates for MoveThroughPath
+				ctx.Logger.Debug("Gap detected in path",
+					slog.Int("gapWidth", gapWidth),
+					slog.Int("distToBeforeGap", distToBeforeGap),
+					slog.Int("distToAfterGap", distToAfterGap))
+
 				areaOrigin := ctx.Data.AreaOrigin
-				movePastGridPos := data.Position{
-					X: movePastPos.X - areaOrigin.X,
-					Y: movePastPos.Y - areaOrigin.Y,
+
+				// If we're far from the gap, first move to the position before the gap
+				if distToBeforeGap > minDistanceToFinishMoving {
+					ctx.Logger.Debug("Moving to position before gap")
+					beforeGapGridPos := data.Position{
+						X: beforeGap.X - areaOrigin.X,
+						Y: beforeGap.Y - areaOrigin.Y,
+					}
+
+					// Update values before movement
+					lastRun = time.Now()
+					previousPosition = ctx.Data.PlayerUnit.Position
+
+					ctx.PathFinder.MoveThroughPath([]data.Position{beforeGapGridPos}, walkDuration)
+					utils.Sleep(100)
+					continue
 				}
 
-				// Update values before movement to maintain stuck detection
-				lastRun = time.Now()
-				if previousPosition != ctx.Data.PlayerUnit.Position {
-					obstacleBypassAttempts = 0 // Reset counter when player successfully moves
+				// We're at the gap edge, now teleport over to the other side
+				if distToAfterGap > minDistanceToFinishMoving {
+					ctx.Logger.Debug("Teleporting over gap", slog.Int("gapWidth", gapWidth))
+					afterGapGridPos := data.Position{
+						X: afterGap.X - areaOrigin.X,
+						Y: afterGap.Y - areaOrigin.Y,
+					}
+
+					// Update values before movement
+					lastRun = time.Now()
+					previousPosition = ctx.Data.PlayerUnit.Position
+
+					ctx.PathFinder.MoveThroughPath([]data.Position{afterGapGridPos}, walkDuration)
+					utils.Sleep(100)
+					continue
 				}
-				previousPosition = ctx.Data.PlayerUnit.Position
-
-				// Try to move past the obstacle
-				ctx.PathFinder.MoveThroughPath([]data.Position{movePastGridPos}, walkDuration)
-				utils.Sleep(100)
-
-				// Continue to next iteration to re-evaluate position
-				continue
 			}
 		}
 
 		//We've reached the destination, stop movement
 		if currentDistanceToDest <= minDistanceToFinishMoving {
+			// Stop movement - if there's an obstacle preventing interaction,
+			// the caller (InteractObject) will retry the movement/interaction sequence
 			return nil
 		} else if blocked {
 			//Add tolerance to reach destination if blocked
@@ -475,9 +494,6 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 
 				// Update values before movement to maintain stuck detection
 				lastRun = time.Now()
-				if previousPosition != ctx.Data.PlayerUnit.Position {
-					obstacleBypassAttempts = 0 // Reset counter when player successfully moves
-				}
 				previousPosition = ctx.Data.PlayerUnit.Position
 
 				ctx.PathFinder.MoveThroughPath([]data.Position{movePastGridPos}, walkDuration)
@@ -493,9 +509,6 @@ func MoveTo(dest data.Position, options ...MoveOption) error {
 
 		//Update values
 		lastRun = time.Now()
-		if previousPosition != ctx.Data.PlayerUnit.Position {
-			obstacleBypassAttempts = 0 // Reset counter when player successfully moves
-		}
 		previousPosition = ctx.Data.PlayerUnit.Position
 
 		//Perform the movement
