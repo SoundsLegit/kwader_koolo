@@ -88,7 +88,7 @@ func (pf *PathFinder) GetPositionPast(to data.Position) data.Position {
 	dirX := to.X - myPos.X
 	dirY := to.Y - myPos.Y
 
-	// Determine direction (+1, 0, -1) for X and Y
+	// Normalize direction to unit steps
 	stepX := 0
 	if dirX > 0 {
 		stepX = 1
@@ -102,7 +102,7 @@ func (pf *PathFinder) GetPositionPast(to data.Position) data.Position {
 		stepY = -1
 	}
 
-	// Move 4 units past `to` in the direction from myPos to `to`
+	// Move 4 units past `to` in the direction from myPos to `to`, ignoring area bounds
 	newPos := data.Position{
 		X: to.X + stepX*4,
 		Y: to.Y + stepY*4,
@@ -221,11 +221,21 @@ func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (
 		}
 
 		// Search perpendicular to the main direction to find narrower crossings
-		// Calculate perpendicular direction (rotate 90 degrees)
-		perpX := -int(stepY)
-		perpY := int(stepX)
-		if perpX == 0 && perpY == 0 {
-			perpX = 1 // Fallback to horizontal search
+		// Calculate perpendicular direction (rotate 90 degrees) from the integer gap vector
+		dx := gap.endPos.X - gap.startPos.X
+		dy := gap.endPos.Y - gap.startPos.Y
+		perpX := -dy
+		perpY := dx
+		// Normalize to unit steps to avoid large jumps
+		if perpX > 0 {
+			perpX = 1
+		} else if perpX < 0 {
+			perpX = -1
+		}
+		if perpY > 0 {
+			perpY = 1
+		} else if perpY < 0 {
+			perpY = -1
 		}
 
 		// Search up to 20 units perpendicular in both directions
