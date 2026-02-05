@@ -88,7 +88,7 @@ func (pf *PathFinder) GetPositionPast(to data.Position) data.Position {
 	dirX := to.X - myPos.X
 	dirY := to.Y - myPos.Y
 
-	// Determine direction (\+1, 0, \-1\) for X and Y
+	// Determine direction (+1, 0, -1) for X and Y
 	stepX := 0
 	if dirX > 0 {
 		stepX = 1
