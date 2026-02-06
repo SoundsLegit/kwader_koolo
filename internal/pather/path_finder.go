@@ -112,12 +112,12 @@ func (pf *PathFinder) GetPositionPast(to data.Position) data.Position {
 }
 
 // DetectGapAndGetTeleportPositions detects if there's a gap of unwalkable area between from and to,
-// and returns the optimal crossing point where the gap width is ≤10 units.
+// and returns the optimal crossing point where the gap width is ≤8 units.
 // Searches both along the direct path and perpendicular to find the narrowest crossing.
 // Returns (beforeGap, afterGap, foundGap)
 func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (data.Position, data.Position, bool) {
 	a := pf.data.AreaData
-	maxTeleportGap := 10 // Maximum gap width that can be efficiently teleported
+	maxTeleportGap := 8 // Maximum gap width that can be efficiently teleported
 
 	dx := to.X - from.X
 	dy := to.Y - from.Y
