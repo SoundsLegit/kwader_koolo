@@ -291,25 +291,6 @@ foundOptimal:
 	return data.Position{}, data.Position{}, false
 }
 
-func (pf *PathFinder) GetPath(to data.Position) (Path, int, bool) {
-	// First try direct path
-	if path, distance, found := pf.GetPathFrom(pf.data.PlayerUnit.Position, to); found {
-		return path, distance, true
-	}
-
-	walkableTo, foundTo := pf.findNearbyWalkablePosition(to)
-	// If direct path fails, try to find nearby to walkable position
-	if foundTo {
-		path, distance, found := pf.GetPathFrom(pf.data.PlayerUnit.Position, walkableTo)
-		if found {
-			return path, distance, true
-		}
-	}
-
-	//We definitively tried our best
-	return nil, 0, false
-}
-
 func (pf *PathFinder) GetPathFrom(from, to data.Position) (Path, int, bool) {
 	a := pf.data.AreaData
 	canTeleport := pf.data.CanTeleport()
@@ -634,4 +615,220 @@ func (pf *PathFinder) findNearbyWalkablePositionInGrid(grid *game.Grid, target d
 func (pf *PathFinder) findNearbyWalkablePosition(target data.Position) (data.Position, bool) {
 
 	return pf.findNearbyWalkablePositionInGrid(pf.data.AreaData.Grid, target)
+}
+
+func (pf *PathFinder) GetPath(to data.Position) (Path, int, bool) {
+	from := pf.data.PlayerUnit.Position
+	a := pf.data.AreaData
+	canTeleport := pf.data.CanTeleport()
+
+	// We don't want to modify the original grid
+	grid := a.Grid.Copy()
+
+	// Special handling for Arcane Sanctuary (to allow pathing with platforms)
+	if pf.data.PlayerUnit.Area == area.ArcaneSanctuary && pf.data.CanTeleport() {
+		// Make all non-walkable tiles into low priority tiles for teleport pathing
+		for y := 0; y < grid.Height; y++ {
+			for x := 0; x < grid.Width; x++ {
+				if grid.Get(x, y) == game.CollisionTypeNonWalkable {
+					grid.Set(x, y, game.CollisionTypeLowPriority)
+				}
+			}
+		}
+	}
+	// Lut Gholein map is a bit bugged, we should close this fake path to avoid pathing issues
+	if a.Area == area.LutGholein {
+		if 210 < a.Grid.Width && 13 < a.Grid.Height {
+			a.Grid.Set(210, 13, game.CollisionTypeNonWalkable)
+		}
+	}
+
+	if !a.IsInside(to) {
+		expandedGrid, err := pf.mergeGrids(to, canTeleport)
+		if err != nil {
+			return nil, 0, false
+		}
+		grid = expandedGrid
+	}
+
+	if !grid.IsWalkable(to) {
+		if walkableTo, found := pf.findNearbyWalkablePositionInGrid(grid, to); found {
+			to = walkableTo
+		}
+	}
+	from = grid.RelativePosition(from)
+	to = grid.RelativePosition(to)
+
+	// Add objects to the collision grid as obstacles
+	for _, o := range pf.data.AreaData.Objects {
+		if !grid.IsWalkable(o.Position) {
+			continue
+		}
+		relativePos := grid.RelativePosition(o.Position)
+		if relativePos.X < 0 || relativePos.X >= grid.Width || relativePos.Y < 0 || relativePos.Y >= grid.Height {
+			continue
+		}
+		grid.Set(relativePos.X, relativePos.Y, game.CollisionTypeObject)
+		for i := -2; i <= 2; i++ {
+			for j := -2; j <= 2; j++ {
+				if i == 0 && j == 0 {
+					continue
+				}
+				ny, nx := relativePos.Y+i, relativePos.X+j
+				if ny < 0 || ny >= grid.Height || nx < 0 || nx >= grid.Width {
+					continue
+				}
+				if grid.Get(nx, ny) == game.CollisionTypeWalkable {
+					grid.Set(nx, ny, game.CollisionTypeLowPriority)
+				}
+			}
+		}
+	}
+
+	// Add monsters to the collision grid as obstacles
+	for _, m := range pf.data.Monsters {
+		if !grid.IsWalkable(m.Position) {
+			continue
+		}
+		relativePos := grid.RelativePosition(m.Position)
+		if relativePos.X < 0 || relativePos.X >= grid.Width || relativePos.Y < 0 || relativePos.Y >= grid.Height {
+			continue
+		}
+		grid.Set(relativePos.X, relativePos.Y, game.CollisionTypeMonster)
+	}
+
+	// set barricade tower as non walkable in act 5
+	if a.Area == area.FrigidHighlands || a.Area == area.FrozenTundra || a.Area == area.ArreatPlateau {
+		towerCount := 0
+		for _, n := range pf.data.NPCs {
+			if n.ID != npc.BarricadeTower {
+				continue
+			}
+			if len(n.Positions) == 0 {
+				continue
+			}
+			npcPos := n.Positions[0]
+			relativePos := grid.RelativePosition(npcPos)
+			towerCount++
+
+			// Set a 5x5 area around the barricade tower as non-walkable
+			blockedCells := 0
+			for dy := -2; dy <= 2; dy++ {
+				for dx := -2; dx <= 2; dx++ {
+					towerY := relativePos.Y + dy
+					towerX := relativePos.X + dx
+
+					// Bounds checking to prevent array index out of bounds
+					if towerY >= 0 && towerY < grid.Height &&
+						towerX >= 0 && towerX < grid.Width {
+						grid.Set(towerX, towerY, game.CollisionTypeNonWalkable)
+						blockedCells++
+					}
+				}
+			}
+		}
+	}
+
+	path, distance, found := astar.CalculatePath(grid, from, to, canTeleport, pf.astarBuffers)
+
+	if config.Koolo.Debug.RenderMap {
+		pf.renderMap(grid, from, to, path)
+	}
+
+	if pf.data.PlayerUnit.Area != area.ArcaneSanctuary && pf.data.CanTeleport() && found && len(path) > 1 {
+		// Remove or replace short teleports (<= 3) that try to teleport into invalid map terrain (not accessible)
+		newPath := make(Path, 0, len(path))
+		newPath = append(newPath, path[0])
+
+		isValidTeleportDest := func(pos data.Position) bool {
+			if pos.X < 0 || pos.Y < 0 || pos.X >= grid.Width || pos.Y >= grid.Height {
+				return false
+			}
+			ct := grid.Get(pos.X, pos.Y)
+			return ct == game.CollisionTypeWalkable || ct == game.CollisionTypeTeleportOver
+		}
+
+		// Helper: Bresenham's line algorithm to find last valid tile before invalid
+		findLastValid := func(from, to data.Position) data.Position {
+			x0, y0 := from.X, from.Y
+			x1, y1 := to.X, to.Y
+			dx := utils.Abs(x1 - x0)
+			dy := utils.Abs(y1 - y0)
+			sx := -1
+			if x0 < x1 {
+				sx = 1
+			}
+			sy := -1
+			if y0 < y1 {
+				sy = 1
+			}
+			err := dx - dy
+			lastValid := from
+			for {
+				pos := data.Position{X: x0, Y: y0}
+				if !isValidTeleportDest(pos) {
+					break
+				}
+				lastValid = pos
+				if x0 == x1 && y0 == y1 {
+					break
+				}
+				e2 := 2 * err
+				if e2 > -dy {
+					err -= dy
+					x0 += sx
+				}
+				if e2 < dx {
+					err += dx
+					y0 += sy
+				}
+			}
+			return lastValid
+		}
+
+		for i := 1; i < len(path); i++ {
+			p1 := path[i-1]
+			p2 := path[i]
+
+			dx := p2.X - p1.X
+			if dx < 0 {
+				dx = -dx
+			}
+			dy := p2.Y - p1.Y
+			if dy < 0 {
+				dy = -dy
+			}
+			cheb := dx
+			if dy > cheb {
+				cheb = dy
+			}
+
+			if cheb <= 3 {
+				if !isValidTeleportDest(p2) {
+					lastValid := findLastValid(p1, p2)
+					// Only add if not the same as p1 and not already in path
+					if (lastValid.X != p1.X || lastValid.Y != p1.Y) && (len(newPath) == 0 || lastValid != newPath[len(newPath)-1]) {
+						// Ensure lastValid is in the correct direction (between p1 and p2)
+						d1 := (p2.X-p1.X)*(lastValid.X-p1.X) + (p2.Y-p1.Y)*(lastValid.Y-p1.Y)
+						d2 := (p2.X-p1.X)*(p2.X-p1.X) + (p2.Y-p1.Y)*(p2.Y-p1.Y)
+						// d1 >= 0 ensures lastValid is not behind p1, d1 <= d2 ensures it's not past p2
+						if d1 >= 0 && d1 <= d2 {
+							// Also ensure lastValid is closer to p2 than p1 is
+							distLastValidP2 := (p2.X-lastValid.X)*(p2.X-lastValid.X) + (p2.Y-lastValid.Y)*(p2.Y-lastValid.Y)
+							if distLastValidP2 < d2 {
+								newPath = append(newPath, lastValid)
+							}
+						}
+					}
+					continue // skip original invalid step
+				}
+			}
+
+			newPath = append(newPath, p2)
+		}
+
+		path = newPath
+	}
+
+	return path, distance, found
 }

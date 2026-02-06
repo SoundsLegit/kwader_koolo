@@ -122,15 +122,18 @@ func CalculatePath(g *game.Grid, start, goal data.Position, canTeleport bool, bu
 				}
 			}
 			// Build path in reverse order, then reverse in-place
-			path := make([]data.Position, pathLen)
-			i := pathLen - 1
+			path := make([]data.Position, 0, pathLen)
 			for p := goal; p != start; p = cameFrom[idx(p.X, p.Y)] {
 				if g.Get(p.X, p.Y) != game.CollisionTypeTeleportOver {
-					path[i] = p
-					i--
+					path = append(path, p)
 				}
 			}
-			path[0] = start
+			path = append(path, start)
+
+			// Reverse the path
+			for i, j := 0, len(path)-1; i < j; i, j = i+1, j-1 {
+				path[i], path[j] = path[j], path[i]
+			}
 
 			// If final position is adjacent to a wall/teleport tile, insert a point up to 7 tiles further away
 			if len(path) > 0 {
