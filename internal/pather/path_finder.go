@@ -39,85 +39,13 @@ func (pf *PathFinder) SetPacketSender(ps *game.PacketSender) {
 	pf.packetSender = ps
 }
 
-func (pf *PathFinder) IsObstacleBetween(from, to data.Position) bool {
-	a := pf.data.AreaData
-
-	x0, y0 := from.X, from.Y
-	x1, y1 := to.X, to.Y
-	dx := utils.Abs(x1 - x0)
-	dy := utils.Abs(y1 - y0)
-	sx := -1
-	if x0 < x1 {
-		sx = 1
-	}
-	sy := -1
-	if y0 < y1 {
-		sy = 1
-	}
-	err := dx - dy
-
-	for {
-		pos := data.Position{X: x0, Y: y0}
-		if !a.CanTeleportTo(pos) {
-			return true
-		}
-
-		if x0 == x1 && y0 == y1 {
-			break
-		}
-
-		e2 := 2 * err
-		if e2 > -dy {
-			err -= dy
-			x0 += sx
-		}
-		if e2 < dx {
-			err += dx
-			y0 += sy
-		}
-	}
-
-	return false
-}
-
-func (pf *PathFinder) GetPositionPast(to data.Position) data.Position {
-	// Get my position
-	myPos := pf.data.PlayerUnit.Position
-
-	// Calculate direction vector
-	dirX := to.X - myPos.X
-	dirY := to.Y - myPos.Y
-
-	// Normalize direction to unit steps
-	stepX := 0
-	if dirX > 0 {
-		stepX = 1
-	} else if dirX < 0 {
-		stepX = -1
-	}
-	stepY := 0
-	if dirY > 0 {
-		stepY = 1
-	} else if dirY < 0 {
-		stepY = -1
-	}
-
-	// Move 4 units past `to` in the direction from myPos to `to`, ignoring area bounds
-	newPos := data.Position{
-		X: to.X + stepX*4,
-		Y: to.Y + stepY*4,
-	}
-
-	return newPos
-}
-
 // DetectGapAndGetTeleportPositions detects if there's a gap of unwalkable area between from and to,
-// and returns the optimal crossing point where the gap width is ≤8 units.
+// and returns the optimal crossing point where the gap width is <= 7 units.
 // Searches both along the direct path and perpendicular to find the narrowest crossing.
 // Returns (beforeGap, afterGap, foundGap)
 func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (data.Position, data.Position, bool) {
 	a := pf.data.AreaData
-	maxTeleportGap := 8 // Maximum gap width that can be efficiently teleported
+	maxTeleportGap := 7 // Maximum gap width that can be efficiently teleported
 
 	dx := to.X - from.X
 	dy := to.Y - from.Y
