@@ -133,6 +133,12 @@ func PickupItemMouse(it data.Item, itemPickupAttempt int) error {
 			return fmt.Errorf("failed to pick up %s after %d attempts", it.Desc().Name, spiralAttempt)
 		}
 
+		if spiralAttempt%3 == 0 {
+			ctx.Logger.Debug("Performing random movement to prevent getting stuck while picking up item", "attempt", spiralAttempt)
+			ctx.PathFinder.RandomMovement()
+			time.Sleep(200 * time.Millisecond)
+		}
+
 		offsetX, offsetY := utils.ItemSpiral(spiralAttempt)
 		cursorX := baseScreenX + offsetX
 		cursorY := baseScreenY + offsetY
