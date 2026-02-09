@@ -45,7 +45,8 @@ func (pf *PathFinder) SetPacketSender(ps *game.PacketSender) {
 // Returns (beforeGap, afterGap, foundGap)
 func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (data.Position, data.Position, bool) {
 	a := pf.data.AreaData
-	maxTeleportGap := 7 // Maximum gap width that can be efficiently teleported
+	maxTeleportGap := 5 // Maximum gap width that can be efficiently teleported
+	maxGapWidth := 8    // Hard limit on gap width to consider for teleporting
 
 	dx := to.X - from.X
 	dy := to.Y - from.Y
@@ -127,6 +128,11 @@ func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (
 	var bestCrossing *crossingPoint
 
 	for _, gap := range gaps {
+		// Skip gaps that are too large to teleport across
+		if gap.width > maxGapWidth {
+			continue
+		}
+
 		// Start with the direct crossing
 		if bestCrossing == nil || gap.width < bestCrossing.width {
 			beforeIdx := gap.startIdx - 1
@@ -194,6 +200,11 @@ func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (
 				gapWidthHere := int(math.Sqrt(float64((checkEnd.X-checkStart.X)*(checkEnd.X-checkStart.X) +
 					(checkEnd.Y-checkStart.Y)*(checkEnd.Y-checkStart.Y))))
 
+				// Skip if this crossing exceeds max gap width
+				if gapWidthHere > maxGapWidth {
+					continue
+				}
+
 				// If this crossing is better (narrower), use it
 				if gapWidthHere < bestCrossing.width {
 					bestCrossing = &crossingPoint{
@@ -213,6 +224,10 @@ func (pf *PathFinder) DetectGapAndGetTeleportPositions(from, to data.Position) (
 
 foundOptimal:
 	if bestCrossing != nil {
+		// Final sanity check: ensure the gap width doesn't exceed max
+		if bestCrossing.width > maxGapWidth {
+			return data.Position{}, data.Position{}, false
+		}
 		return bestCrossing.beforePos, bestCrossing.afterPos, true
 	}
 
@@ -330,7 +345,7 @@ func (pf *PathFinder) GetPathFrom(from, to data.Position) (Path, int, bool) {
 		}
 	}
 
-	path, distance, found := astar.CalculatePath(grid, from, to, canTeleport, pf.astarBuffers)
+	path, distance, found := astar.CalculatePath(grid, from, to, canTeleport, pf.astarBuffers, a.Area, false)
 
 	if config.Koolo.Debug.RenderMap {
 		pf.renderMap(grid, from, to, path)
@@ -524,7 +539,8 @@ func (pf *PathFinder) GetClosestWalkablePathFrom(from, dest data.Position) (Path
 
 func (pf *PathFinder) findNearbyWalkablePositionInGrid(grid *game.Grid, target data.Position) (data.Position, bool) {
 	// Search in expanding squares around the target position
-	for radius := 1; radius <= 3; radius++ {
+	// Increased radius from 3 to 7 to better handle wall-stuck scenarios
+	for radius := 1; radius <= 7; radius++ {
 		for x := -radius; x <= radius; x++ {
 			for y := -radius; y <= radius; y++ {
 				if x == 0 && y == 0 {
@@ -541,8 +557,29 @@ func (pf *PathFinder) findNearbyWalkablePositionInGrid(grid *game.Grid, target d
 }
 
 func (pf *PathFinder) findNearbyWalkablePosition(target data.Position) (data.Position, bool) {
-
 	return pf.findNearbyWalkablePositionInGrid(pf.data.AreaData.Grid, target)
+}
+
+// RequiresWallHuggingToReach checks if the destination requires wall-hugging to reach it
+// (i.e., moving close to a wall/gap that needs to be teleported through).
+// Returns the wall-hug position to move to before teleporting, or empty Position if no special handling needed.
+func (pf *PathFinder) RequiresWallHuggingToReach(to data.Position) (data.Position, bool) {
+	from := pf.data.PlayerUnit.Position
+
+	// Only relevant if player can teleport
+	if !pf.data.CanTeleport() {
+		return data.Position{}, false
+	}
+
+	// Use existing gap detection to find if path crosses wall/gap
+	beforeGap, _, foundGap := pf.DetectGapAndGetTeleportPositions(from, to)
+	if !foundGap {
+		return data.Position{}, false
+	}
+
+	// There's a gap - return the position just before the gap to move to
+	// Player should wall-hug to reach this position, then teleport through
+	return beforeGap, true
 }
 
 func (pf *PathFinder) GetPath(to data.Position) (Path, int, bool) {
@@ -657,7 +694,7 @@ func (pf *PathFinder) GetPath(to data.Position) (Path, int, bool) {
 		}
 	}
 
-	path, distance, found := astar.CalculatePath(grid, from, to, canTeleport, pf.astarBuffers)
+	path, distance, found := astar.CalculatePath(grid, from, to, canTeleport, pf.astarBuffers, a.Area, false)
 
 	if config.Koolo.Debug.RenderMap {
 		pf.renderMap(grid, from, to, path)
@@ -759,4 +796,135 @@ func (pf *PathFinder) GetPath(to data.Position) (Path, int, bool) {
 	}
 
 	return path, distance, found
+}
+
+// isAdjacentToWall returns true if the given grid tile is next to a NonWalkable tile.
+// Chebyshev distance 1 (8-neighborhood).
+func isAdjacentToWall(grid *game.Grid, pos data.Position) bool {
+	if pos.X < 0 || pos.Y < 0 || pos.X >= grid.Width || pos.Y >= grid.Height {
+		return false
+	}
+	for dy := -1; dy <= 1; dy++ {
+		for dx := -1; dx <= 1; dx++ {
+			if dx == 0 && dy == 0 {
+				continue
+			}
+			nx := pos.X + dx
+			ny := pos.Y + dy
+			if nx < 0 || ny < 0 || nx >= grid.Width || ny >= grid.Height {
+				continue
+			}
+			ct := grid.Get(nx, ny)
+			if ct == game.CollisionTypeNonWalkable {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// isTeleportCrossingSegment returns true if segment from p1 to p2 crosses NonWalkable/TeleportOver terrain
+// implying the intent to cross a wall via teleport when teleport is enabled.
+func isTeleportCrossingSegment(grid *game.Grid, p1, p2 data.Position) bool {
+	// Bresenham along the line, if any tile is NonWalkable or TeleportOver, it is a crossing.
+	x0, y0 := p1.X, p1.Y
+	x1, y1 := p2.X, p2.Y
+	dx := utils.Abs(x1 - x0)
+	dy := utils.Abs(y1 - y0)
+	sx := -1
+	if x0 < x1 {
+		sx = 1
+	}
+	sy := -1
+	if y0 < y1 {
+		sy = 1
+	}
+	err := dx - dy
+	for {
+		if x0 < 0 || y0 < 0 || x0 >= grid.Width || y0 >= grid.Height {
+			break
+		}
+		ct := grid.Get(x0, y0)
+		if ct == game.CollisionTypeNonWalkable || ct == game.CollisionTypeTeleportOver {
+			return true
+		}
+		if x0 == x1 && y0 == y1 {
+			break
+		}
+		e2 := 2 * err
+		if e2 > -dy {
+			err -= dy
+			x0 += sx
+		}
+		if e2 < dx {
+			err += dx
+			y0 += sy
+		}
+	}
+	return false
+}
+
+// findLastValidWalkableOrTeleportDest finds the last tile along the segment that is valid to stand/teleport on.
+func findLastValidWalkableOrTeleportDest(grid *game.Grid, from, to data.Position) data.Position {
+	isValid := func(pos data.Position) bool {
+		if pos.X < 0 || pos.Y < 0 || pos.X >= grid.Width || pos.Y >= grid.Height {
+			return false
+		}
+		ct := grid.Get(pos.X, pos.Y)
+		return ct == game.CollisionTypeWalkable || ct == game.CollisionTypeTeleportOver
+	}
+	x0, y0 := from.X, from.Y
+	x1, y1 := to.X, to.Y
+	dx := utils.Abs(x1 - x0)
+	dy := utils.Abs(y1 - y0)
+	sx := -1
+	if x0 < x1 {
+		sx = 1
+	}
+	sy := -1
+	if y0 < y1 {
+		sy = 1
+	}
+	err := dx - dy
+	lastValid := from
+	for {
+		pos := data.Position{X: x0, Y: y0}
+		if !isValid(pos) {
+			break
+		}
+		lastValid = pos
+		if x0 == x1 && y0 == y1 {
+			break
+		}
+		e2 := 2 * err
+		if e2 > -dy {
+			err -= dy
+			x0 += sx
+		}
+		if e2 < dx {
+			err += dx
+			y0 += sy
+		}
+	}
+	return lastValid
+}
+
+// advanceAlongDirection returns the point moved "step" units along vector p1->p2.
+func advanceAlongDirection(p1, p2 data.Position, step int) data.Position {
+	dx := p2.X - p1.X
+	dy := p2.Y - p1.Y
+	// Normalize to unit Chebyshev step
+	stepx := 0
+	stepy := 0
+	if dx > 0 {
+		stepx = 1
+	} else if dx < 0 {
+		stepx = -1
+	}
+	if dy > 0 {
+		stepy = 1
+	} else if dy < 0 {
+		stepy = -1
+	}
+	return data.Position{X: p1.X + stepx*step, Y: p1.Y + stepy*step}
 }

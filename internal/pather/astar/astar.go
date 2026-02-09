@@ -5,6 +5,7 @@ import (
 	"math"
 
 	"github.com/hectorgimenez/d2go/pkg/data"
+	"github.com/hectorgimenez/d2go/pkg/data/area"
 	"github.com/hectorgimenez/koolo/internal/game"
 )
 
@@ -64,7 +65,8 @@ func (b *AStarBuffers) index(x, y int) int {
 
 // CalculatePath finds a path using A* algorithm. If buffers is nil, allocates new buffers.
 // For optimal performance, reuse buffers across calls by creating AStarBuffers once per PathFinder.
-func CalculatePath(g *game.Grid, start, goal data.Position, canTeleport bool, buffers *AStarBuffers) ([]data.Position, int, bool) {
+// areaID for area-specific behavior, disableWallAvoidance to allow wall-hugging when approaching gaps.
+func CalculatePath(g *game.Grid, start, goal data.Position, canTeleport bool, buffers *AStarBuffers, areaID area.ID, disableWallAvoidance bool) ([]data.Position, int, bool) {
 	inBounds := func(p data.Position) bool {
 		return p.X >= 0 && p.Y >= 0 && p.X < g.Width && p.Y < g.Height
 	}
@@ -136,7 +138,7 @@ func CalculatePath(g *game.Grid, start, goal data.Position, canTeleport bool, bu
 			}
 
 			// If final position is adjacent to a wall/teleport tile, insert a point up to 7 tiles further away
-			if len(path) > 0 {
+			if len(path) > 0 && !disableWallAvoidance {
 				final := path[len(path)-1]
 				for _, d := range directions {
 					wallX, wallY := final.X+d.X, final.Y+d.Y
@@ -187,7 +189,7 @@ func CalculatePath(g *game.Grid, start, goal data.Position, canTeleport bool, bu
 
 			currentIdx := idx(current.X, current.Y)
 			neighborIdx := idx(neighbor.X, neighbor.Y)
-			newCost := costSoFar[currentIdx] + getCost(tileType, canTeleport)
+			newCost := costSoFar[currentIdx] + getCost(tileType, canTeleport, areaID, disableWallAvoidance)
 
 			// Handicap for changing direction, this prevents zig-zagging around obstacles
 			//curDirX, curDirY := direction(cameFrom[currentIdx], current.Position)
@@ -252,7 +254,7 @@ func updateNeighbors(grid *game.Grid, node *Node, neighbors *[]data.Position, ca
 	}
 }
 
-func getCost(tileType game.CollisionType, canTeleport bool) int {
+func getCost(tileType game.CollisionType, canTeleport bool, areaID area.ID, disableWallAvoidance bool) int {
 	switch tileType {
 	case game.CollisionTypeWalkable:
 		return 1 // Walkable
@@ -261,6 +263,16 @@ func getCost(tileType game.CollisionType, canTeleport bool) int {
 	case game.CollisionTypeObject:
 		return 4 // Soft blocker
 	case game.CollisionTypeLowPriority:
+		// If wall-avoidance is disabled (approaching a gap for teleport), allow wall-hugging
+		if disableWallAvoidance {
+			return 5 // Low cost to allow movement near walls
+		}
+		// For narrow maps, use much lower cost to allow wall-hugging when necessary
+		// This matches closer to walkable tiles to permit navigation in tight corridors
+		if game.IsNarrowMapArea(areaID) {
+			return 10
+		}
+		// For normal areas, use higher cost to avoid walls (but not as aggressive as before)
 		return 20
 	case game.CollisionTypeTeleportOver:
 		if canTeleport {
