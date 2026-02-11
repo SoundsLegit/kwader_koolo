@@ -140,6 +140,7 @@ func CalculatePath(g *game.Grid, start, goal data.Position, canTeleport bool, bu
 			// If final position is adjacent to a wall/teleport tile, insert a point up to 7 tiles further away
 			if len(path) > 0 && !disableWallAvoidance {
 				final := path[len(path)-1]
+				adjusted := final
 				for _, d := range directions {
 					wallX, wallY := final.X+d.X, final.Y+d.Y
 					if wallX < 0 || wallX >= g.Width || wallY < 0 || wallY >= g.Height {
@@ -154,15 +155,28 @@ func CalculatePath(g *game.Grid, start, goal data.Position, canTeleport bool, bu
 							}
 							endType := g.Get(newX, newY)
 							if endType != game.CollisionTypeNonWalkable && endType != game.CollisionTypeTeleportOver {
-								if newX != final.X || newY != final.Y {
-									// Insert before the last element
-									path = append(path[:len(path)-1], append([]data.Position{{X: newX, Y: newY}}, path[len(path)-1])...)
+								newPos := data.Position{X: newX, Y: newY}
+								// Enforce minimum 5-tile spacing from previous point (unless it's the last step)
+								// Instead of inserting, modify the final waypoint to reduce jitter
+								canModify := true
+								if len(path) >= 3 {
+									prevPos := path[len(path)-2]
+									if chebyshevDistance(newPos, prevPos) < 5 {
+										canModify = false
+									}
+								}
+								if canModify {
+									adjusted = newPos
 								}
 								break
 							}
 						}
 						break
 					}
+				}
+				// Apply adjustment if changed and not the last step (to avoid modifying the actual goal position)
+				if adjusted != final && final != goal {
+					path[len(path)-1] = adjusted
 				}
 			}
 
@@ -293,4 +307,20 @@ func heuristic(a, b data.Position) int {
 	dx := math.Abs(float64(a.X - b.X))
 	dy := math.Abs(float64(a.Y - b.Y))
 	return int(dx + dy + (math.Sqrt(2)-2)*math.Min(dx, dy))
+}
+
+// chebyshevDistance returns the Chebyshev distance (max of |dx|, |dy|) between two positions
+func chebyshevDistance(a, b data.Position) int {
+	dx := a.X - b.X
+	if dx < 0 {
+		dx = -dx
+	}
+	dy := a.Y - b.Y
+	if dy < 0 {
+		dy = -dy
+	}
+	if dx > dy {
+		return dx
+	}
+	return dy
 }
