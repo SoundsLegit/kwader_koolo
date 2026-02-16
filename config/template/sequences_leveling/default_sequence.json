@@ -342,8 +342,7 @@
             }
         ],
         "stayDifficultyConditions": {
-            "fireRes": 0,
-            "lightRes": 0,
+            "level": 70,
             "aboveLowGold": true
         },
         "configSettings": [

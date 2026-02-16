@@ -37,7 +37,12 @@ func CubeAddItems(items ...data.Item) error {
 	// If items are on the Stash, pickup them to the inventory
 	for _, itm := range items {
 		nwIt := itm
-		if nwIt.Location.LocationType != item.LocationStash && nwIt.Location.LocationType != item.LocationSharedStash {
+		// Check if item is in any stash location (personal, shared, or DLC tabs)
+		if nwIt.Location.LocationType != item.LocationStash &&
+			nwIt.Location.LocationType != item.LocationSharedStash &&
+			nwIt.Location.LocationType != item.LocationGemsTab &&
+			nwIt.Location.LocationType != item.LocationMaterialsTab &&
+			nwIt.Location.LocationType != item.LocationRunesTab {
 			continue
 		}
 
@@ -53,6 +58,13 @@ func CubeAddItems(items ...data.Item) error {
 				SwitchStashTab(1)
 			case item.LocationSharedStash:
 				SwitchStashTab(nwIt.Location.Page + 1)
+			case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+				// DLC tabs are accessed through stash UI (page navigation)
+				// GemsTab, MaterialsTab, and RunesTab appear after shared stash pages
+				// For DLC with 5 shared pages, tabs would be at pages 7, 8, 9
+				// This requires proper tab detection - for now, switch to shared stash page 1
+				// and let the UI handle navigation to DLC tabs
+				SwitchStashTab(2) // Start at first shared stash page
 			}
 		}
 

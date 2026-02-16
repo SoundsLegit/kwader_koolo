@@ -3,7 +3,7 @@
 //[name] == scrolloftownportal
 //[name] == scrollofidentify
 
-// ubers
+// uber tristram
 [name] == keyofterror
 [name] == keyofhate
 [name] == keyofdestruction
@@ -13,6 +13,20 @@
 //[name] == mephistosbrain
 //[name] == baalseye
 //[name] == diabloshorn
+
+// uber ancients (rotw)
+[name] == uberancientsummonmaterialact1		
+[name] == uberancientsummonmaterialact2		
+[name] == uberancientsummonmaterialact3		
+[name] == uberancientsummonmaterialact4		
+[name] == uberancientsummonmaterialact5		
+
+// shards (rotw)
+[name] == westernworldstoneshard			
+[name] == easternworldstoneshard			
+[name] == southernworldstoneshard			
+[name] == deepworldstoneshard				
+[name] == northernworldstoneshard 			
 
 // tokens
 //[name] == twistedessenceofsuffering 		# # [maxquantity] == 2

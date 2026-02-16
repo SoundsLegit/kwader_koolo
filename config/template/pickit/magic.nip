@@ -20,6 +20,9 @@
 [name] == grandcharm 		&& [quality] == magic # [poisonandboneskilltab] >= 1
 //[name] == grandcharm 		&& [quality] == magic # [necromancersummoningskilltab] >= 1
 //[name] == grandcharm 		&& [quality] == magic # [cursesskilltab] >= 1
+//[name] == grandcharm 		&& [quality] == magic # [chaosskilltab] >= 1
+//[name] == grandcharm 		&& [quality] == magic # [eldritchskilltab] >= 1
+//[name] == grandcharm 		&& [quality] == magic # [demonskilltab] >= 1
 
 //[name] == grandcharm 		&& [quality] == magic # [fhr] >= 12 && [fireskilltab] >= 1
 //[name] == grandcharm 		&& [quality] == magic # [fhr] >= 12 && [coldskilltab] >= 1 

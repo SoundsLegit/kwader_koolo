@@ -194,3 +194,15 @@
 [name] == trollbelt 		&& [quality] == set																								// trang-oul's girth
 //[name] == heavybracers 	&& [quality] == set # [defense] >= 74 																			// trang-oul's claws perfect
 [name] == heavybracers 		&& [quality] == set					 																			// trang-oul's claws
+
+//Bane's Garments
+[name] == kris && [quality] == set 																											//Banes Oathmaker
+[name] == hardleatherarmor && [quality] == set 																								// Banes Wraithskin
+[name] == lightbelt && [quality] == set 																									// Banes Authority
+
+//Horazon's Splendor
+[name] == demonhead && [quality] == set 												 													// Horazons Countenance
+[name] == russetarmor && [quality] == set 																									// Horazons Dominion
+[name] == demonhidegloves && [quality] == set  																								// Horazon's Hold
+[name] == mirroredboots && [quality] == set 																								// Horazon's Legacy
+[name] == occultcodex && [quality] == set 																									// Horazon's Legacy

@@ -6,9 +6,10 @@ import { buildField, normalizeRunNumericValue, parseOptionalNumber } from "../..
 
 /**
  * @param {SequenceRunEntry|null} entry
+ * @param {"normal"|"nightmare"|"hell"} difficulty
  * @returns {string}
  */
-export function buildRunSummary(entry) {
+export function buildRunSummary(entry, difficulty) {
   if (!entry) {
     return "";
   }
@@ -37,6 +38,9 @@ export function buildRunSummary(entry) {
   if (entry.stopIfCheckFails) {
     parts.push("Stop on fail");
   }
+  if (entry.skipCountessWhenStealthReady && difficulty === "normal") {
+    parts.push("Skip on Stealth");
+  }
 
   if (!parts.length) {
     return "No modifiers";
@@ -46,10 +50,10 @@ export function buildRunSummary(entry) {
 
 /**
  * @param {SequenceRunEntry} entry
- * @param {{markDirty:() => void, onChange:() => void}} callbacks
+ * @param {{markDirty:() => void, onChange:() => void, difficulty:"normal"|"nightmare"|"hell"}} callbacks
  * @returns {HTMLDivElement}
  */
-export function createRunParameterEditor(entry, { markDirty, onChange }) {
+export function createRunParameterEditor(entry, { markDirty, onChange, difficulty }) {
   const editor = document.createElement("div");
   editor.className = "run-parameter-editor";
 
@@ -95,6 +99,13 @@ export function createRunParameterEditor(entry, { markDirty, onChange }) {
     ["exitGame", "Exit game after"],
     ["stopIfCheckFails", "Stop on failure"],
   ];
+
+  if (entry.run === "countess" && difficulty === "normal") {
+    flagDefinitions.push([
+      "skipCountessWhenStealthReady",
+      "Skip once Tal+Eth or Stealth is available",
+    ]);
+  }
 
   flagDefinitions.forEach(([field, label]) => {
     const wrapper = document.createElement("label");

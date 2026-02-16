@@ -87,6 +87,7 @@ func AutoCreateCharacter(class, name string) error {
 	}
 
 	// 5. Input Name
+	ensureForegroundWindow(ctx)
 	if err := inputCharacterName(ctx, name); err != nil {
 		return err
 	}
@@ -120,6 +121,31 @@ func AutoCreateCharacter(class, name string) error {
 	}
 
 	return errors.New("creation timeout or character not found after creation")
+}
+
+func ensureForegroundWindow(ctx *context.Status) {
+	if ctx == nil || ctx.GameReader == nil {
+		return
+	}
+	hwnd := ctx.GameReader.HWND
+	if hwnd == 0 {
+		return
+	}
+
+	for i := 0; i < 3; i++ {
+		win.ShowWindow(hwnd, win.SW_RESTORE)
+		win.SetForegroundWindow(hwnd)
+		win.BringWindowToTop(hwnd)
+		win.SetActiveWindow(hwnd)
+		win.SetFocus(hwnd)
+		utils.Sleep(150)
+		if win.GetForegroundWindow() == hwnd {
+			return
+		}
+		utils.Sleep(150)
+	}
+
+	ctx.Logger.Warn("[AutoCreate] Failed to set foreground window before name input")
 }
 
 func enterCreationScreen(ctx *context.Status) error {

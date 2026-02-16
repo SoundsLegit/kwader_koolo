@@ -29,6 +29,8 @@ const BELT_COLUMN_OPTIONS = [
  * ExitGame?: boolean,
  * stopIfCheckFails?: boolean,
  * StopIfCheckFails?: boolean,
+ * skipCountessWhenStealthReady?: boolean,
+ * SkipCountessWhenStealthReady?: boolean,
  * parameters?: never
  * }} RawRunEntry
  */
@@ -71,7 +73,8 @@ const BELT_COLUMN_OPTIONS = [
  * lowGoldRun: boolean,
  * skipTownChores: boolean,
  * exitGame: boolean,
- * stopIfCheckFails: boolean
+ * stopIfCheckFails: boolean,
+ * skipCountessWhenStealthReady: boolean
  * }} SequenceRunEntry
  */
 
@@ -220,6 +223,9 @@ export class SequenceDataAdapter {
       skipTownChores: Boolean(raw.skipTownChores ?? raw.SkipTownChores),
       exitGame: Boolean(raw.exitGame ?? raw.ExitGame),
       stopIfCheckFails: Boolean(raw.stopIfCheckFails ?? raw.StopIfCheckFails),
+      skipCountessWhenStealthReady: Boolean(
+        raw.skipCountessWhenStealthReady ?? raw.SkipCountessWhenStealthReady
+      ),
     });
 
     this.state.ensureEntryUID(entry);
@@ -372,6 +378,9 @@ export class SequenceDataAdapter {
     }
     if (entry.stopIfCheckFails) {
       result.stopIfCheckFails = true;
+    }
+    if (entry.skipCountessWhenStealthReady) {
+      result.skipCountessWhenStealthReady = true;
     }
 
     return result;
@@ -542,6 +551,7 @@ export class SequenceDataAdapter {
     entry.skipTownChores = Boolean(entry.skipTownChores);
     entry.exitGame = Boolean(entry.exitGame);
     entry.stopIfCheckFails = Boolean(entry.stopIfCheckFails);
+    entry.skipCountessWhenStealthReady = Boolean(entry.skipCountessWhenStealthReady);
     if ("parameters" in entry) {
       delete entry.parameters;
     }
@@ -669,6 +679,7 @@ export class SequenceDataAdapter {
       skipTownChores: false,
       exitGame: false,
       stopIfCheckFails: false,
+      skipCountessWhenStealthReady: false,
     });
     this.state.ensureEntryUID(entry);
     return entry;

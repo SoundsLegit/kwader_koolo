@@ -26,6 +26,10 @@ type Updater struct {
 	statusMux      sync.RWMutex
 	logCallback    func(message string)
 	logCallbackMux sync.RWMutex
+	preRestart     func() error
+	preRestartMux  sync.RWMutex
+	lastBuiltExe   string
+	lastBuiltMux   sync.RWMutex
 	opMux          sync.Mutex
 	opRunning      bool
 	opName         string
@@ -60,6 +64,41 @@ func (u *Updater) SetLogCallback(callback func(message string)) {
 	u.logCallbackMux.Lock()
 	u.logCallback = callback
 	u.logCallbackMux.Unlock()
+}
+
+// SetPreRestartCallback sets a callback to run before restarting the application.
+func (u *Updater) SetPreRestartCallback(callback func() error) {
+	u.preRestartMux.Lock()
+	u.preRestart = callback
+	u.preRestartMux.Unlock()
+}
+
+func (u *Updater) runPreRestart() {
+	u.preRestartMux.RLock()
+	callback := u.preRestart
+	u.preRestartMux.RUnlock()
+	if callback == nil {
+		return
+	}
+	u.log("Requesting graceful shutdown before restart...")
+	if err := callback(); err != nil {
+		u.log(fmt.Sprintf("Graceful shutdown failed: %v", err))
+	} else {
+		u.log("Graceful shutdown completed.")
+	}
+}
+
+func (u *Updater) setLastBuiltExe(path string) {
+	u.lastBuiltMux.Lock()
+	u.lastBuiltExe = path
+	u.lastBuiltMux.Unlock()
+}
+
+func (u *Updater) getLastBuiltExe() string {
+	u.lastBuiltMux.RLock()
+	path := u.lastBuiltExe
+	u.lastBuiltMux.RUnlock()
+	return path
 }
 
 func (u *Updater) log(message string) {
@@ -304,6 +343,8 @@ func (u *Updater) backupOldExecutables(installDir string, tag string) error {
 }
 
 func (u *Updater) buildNewVersion(ctx repoContext) error {
+	u.setLastBuiltExe("")
+
 	// Check Go installation
 	u.log("Checking Go installation...")
 	goCmd := newCommand("go", "version")
@@ -322,10 +363,16 @@ func (u *Updater) buildNewVersion(ctx repoContext) error {
 		u.log(fmt.Sprintf("Garble version: %s", strings.TrimSpace(string(output))))
 	}
 
+	// Build output directory (install dir so restart can pick it up directly)
+	buildDir := ctx.InstallDir
+	if err := os.MkdirAll(buildDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create build output directory: %w", err)
+	}
+
 	// Generate build identifiers
 	buildID := uuid.New().String()
 	buildTime := time.Now().Format(time.RFC3339)
-	outputExe := filepath.Join(ctx.InstallDir, buildID+".exe")
+	outputExe := filepath.Join(buildDir, buildID+".exe")
 
 	u.log("Starting Garble build...")
 	u.log(fmt.Sprintf("Build ID: %s", buildID))
@@ -348,18 +395,16 @@ func (u *Updater) buildNewVersion(ctx repoContext) error {
 		restoreEnv("GOTMPDIR", gotmpPrev, gotmpSet)
 	}()
 
-	if err := os.Setenv("GOGARBLE", "*,!github.com/hectorgimenez/koolo/internal/server*,!github.com/hectorgimenez/koolo/internal/event*,!github.com/inkeliz/gowebview*"); err != nil {
+	if err := os.Setenv("GOGARBLE", "github.com/hectorgimenez/koolo/*,!github.com/hectorgimenez/koolo/internal/server*,!github.com/hectorgimenez/koolo/internal/event*,!github.com/inkeliz/gowebview*"); err != nil {
 		return fmt.Errorf("failed to set GOGARBLE: %w", err)
 	}
 
-	// Create build directory
-	staticBuildDir, err := os.MkdirTemp(ctx.InstallDir, "koolo-build-")
-	if err != nil {
-		staticBuildDir, err = os.MkdirTemp("", "koolo-build-")
-		if err != nil {
-			return fmt.Errorf("failed to create build directory: %w", err)
-		}
+	// Use a static build folder to avoid temp paths being flagged by AV (matches better_build.bat)
+	staticBuildDir := filepath.Join(ctx.RepoDir, "build", "tmp")
+	if err := os.MkdirAll(staticBuildDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create build directory: %w", err)
 	}
+	u.log(fmt.Sprintf("Using static build folder: %s", staticBuildDir))
 	defer os.RemoveAll(staticBuildDir)
 
 	if err := os.Setenv("GOCACHE", filepath.Join(staticBuildDir, "gocache")); err != nil {
@@ -370,7 +415,13 @@ func (u *Updater) buildNewVersion(ctx repoContext) error {
 	}
 
 	// Build ldflags
-	ldflags := fmt.Sprintf("-s -w -H windowsgui -X 'main.buildID=%s' -X 'main.buildTime=%s' -X 'github.com/hectorgimenez/koolo/internal/config.Version=dev'", buildID, buildTime)
+	commitMeta := getBuildCommitInfo(ctx.RepoDir)
+	ldflags := fmt.Sprintf(
+		"-s -w -H windowsgui -X 'main.buildID=%s' -X 'main.buildTime=%s' -X 'github.com/hectorgimenez/koolo/internal/config.Version=dev'%s",
+		buildID,
+		buildTime,
+		commitMeta.ldflags(),
+	)
 
 	// Execute Garble build
 	cmd := newCommand("garble",
@@ -399,10 +450,11 @@ func (u *Updater) buildNewVersion(ctx repoContext) error {
 	}
 
 	u.log(fmt.Sprintf("Build successful: %s.exe", buildID))
+	u.setLastBuiltExe(outputExe)
 
 	// Copy config files
 	u.log("Copying configuration files...")
-	if err := u.copyConfigFiles(ctx); err != nil {
+	if err := u.copyConfigFiles(ctx, buildDir); err != nil {
 		return err
 	}
 
@@ -410,18 +462,56 @@ func (u *Updater) buildNewVersion(ctx repoContext) error {
 	return nil
 }
 
-func (u *Updater) copyConfigFiles(ctx repoContext) error {
+type buildCommitInfo struct {
+	Hash string
+	Time string
+}
+
+func (b buildCommitInfo) ldflags() string {
+	if b.Hash == "" {
+		return ""
+	}
+	parts := []string{
+		fmt.Sprintf(" -X 'github.com/hectorgimenez/koolo/internal/updater.buildCommitHash=%s'", b.Hash),
+	}
+	if b.Time != "" {
+		parts = append(parts, fmt.Sprintf(" -X 'github.com/hectorgimenez/koolo/internal/updater.buildCommitTime=%s'", b.Time))
+	}
+	return strings.Join(parts, "")
+}
+
+func getBuildCommitInfo(repoDir string) buildCommitInfo {
+	var meta buildCommitInfo
+
+	hashOut, err := gitCmd(repoDir, "rev-parse", "HEAD").Output()
+	if err != nil {
+		return meta
+	}
+	meta.Hash = strings.TrimSpace(string(hashOut))
+	if meta.Hash == "" {
+		return meta
+	}
+
+	dateOut, err := gitCmd(repoDir, "show", "-s", "--format=%cI", meta.Hash).Output()
+	if err == nil {
+		meta.Time = strings.TrimSpace(string(dateOut))
+	}
+
+	return meta
+}
+
+func (u *Updater) copyConfigFiles(ctx repoContext, destDir string) error {
 	// Copy tools folder
 	u.log("Copying tools folder...")
-	if err := copyDir(filepath.Join(ctx.RepoDir, "tools"), filepath.Join(ctx.InstallDir, "tools")); err != nil {
+	if err := copyDir(filepath.Join(ctx.RepoDir, "tools"), filepath.Join(destDir, "tools")); err != nil {
 		return fmt.Errorf("failed to copy tools: %w", err)
 	}
 
 	// Create config directory
-	os.MkdirAll(filepath.Join(ctx.InstallDir, "config"), 0755)
+	os.MkdirAll(filepath.Join(destDir, "config"), 0755)
 
 	// Copy Settings.json if it doesn't exist
-	settingsDest := filepath.Join(ctx.InstallDir, "config", "Settings.json")
+	settingsDest := filepath.Join(destDir, "config", "Settings.json")
 	if _, err := os.Stat(settingsDest); os.IsNotExist(err) {
 		u.log("Copying Settings.json...")
 		if err := copyFile(filepath.Join(ctx.RepoDir, "config", "Settings.json"), settingsDest); err != nil {
@@ -430,7 +520,7 @@ func (u *Updater) copyConfigFiles(ctx repoContext) error {
 	}
 
 	// Copy koolo.yaml.dist if koolo.yaml doesn't exist
-	yamlDest := filepath.Join(ctx.InstallDir, "config", "koolo.yaml")
+	yamlDest := filepath.Join(destDir, "config", "koolo.yaml")
 	if _, err := os.Stat(yamlDest); os.IsNotExist(err) {
 		u.log("Copying koolo.yaml.dist...")
 		if err := copyFile(filepath.Join(ctx.RepoDir, "config", "koolo.yaml.dist"), yamlDest); err != nil {
@@ -440,12 +530,23 @@ func (u *Updater) copyConfigFiles(ctx repoContext) error {
 
 	// Copy template folder
 	u.log("Copying template folder...")
-	if err := copyDir(filepath.Join(ctx.RepoDir, "config", "template"), filepath.Join(ctx.InstallDir, "config", "template")); err != nil {
+	if err := copyDir(filepath.Join(ctx.RepoDir, "config", "template"), filepath.Join(destDir, "config", "template")); err != nil {
 		return fmt.Errorf("failed to copy templates: %w", err)
 	}
 
+	// Copy assets folder (one level above the executable directory)
+	assetsDestRoot := ctx.InstallDir
+	parent := filepath.Dir(ctx.InstallDir)
+	if parent != "" && parent != ctx.InstallDir {
+		assetsDestRoot = parent
+	}
+	u.log(fmt.Sprintf("Copying assets folder to: %s", filepath.Join(assetsDestRoot, "assets")))
+	if err := copyDir(filepath.Join(ctx.RepoDir, "assets"), filepath.Join(assetsDestRoot, "assets")); err != nil {
+		return fmt.Errorf("failed to copy assets: %w", err)
+	}
+
 	// Copy README.md
-	if err := copyFile(filepath.Join(ctx.RepoDir, "README.md"), filepath.Join(ctx.InstallDir, "README.md")); err != nil {
+	if err := copyFile(filepath.Join(ctx.RepoDir, "README.md"), filepath.Join(destDir, "README.md")); err != nil {
 		u.log(fmt.Sprintf("Warning: failed to copy README.md: %v", err))
 	}
 
@@ -453,6 +554,8 @@ func (u *Updater) copyConfigFiles(ctx repoContext) error {
 }
 
 func (u *Updater) restartApplication(tag string) error {
+	u.runPreRestart()
+
 	installDir, err := resolveInstallDir()
 	if err != nil {
 		return err
@@ -484,33 +587,47 @@ func (u *Updater) restartApplication(tag string) error {
 	}
 
 	// Find the newly built executable
-	files, err := filepath.Glob(filepath.Join(installDir, "*.exe"))
-	if err != nil || len(files) == 0 {
-		return fmt.Errorf("no executable found after build")
-	}
-
-	// Get the most recent exe
-	var newestExe string
-	var newestTime time.Time
-	for _, file := range files {
-		info, err := os.Stat(file)
-		if err != nil {
-			continue
+	newestExe := ""
+	if builtExe := u.getLastBuiltExe(); builtExe != "" {
+		if absPath, absErr := filepath.Abs(builtExe); absErr == nil {
+			builtExe = absPath
 		}
-		if info.ModTime().After(newestTime) {
-			newestTime = info.ModTime()
-			newestExe, _ = filepath.Abs(file)
+		if _, err := os.Stat(builtExe); err == nil {
+			newestExe = builtExe
 		}
 	}
 
 	if newestExe == "" {
-		return fmt.Errorf("could not find newest executable")
+		files, err := filepath.Glob(filepath.Join(installDir, "*.exe"))
+		if err != nil || len(files) == 0 {
+			return fmt.Errorf("no executable found after build")
+		}
+
+		// Get the most recent exe
+		var newestTime time.Time
+		for _, file := range files {
+			info, err := os.Stat(file)
+			if err != nil {
+				continue
+			}
+			if info.ModTime().After(newestTime) {
+				newestTime = info.ModTime()
+				newestExe, _ = filepath.Abs(file)
+			}
+		}
+
+		if newestExe == "" {
+			return fmt.Errorf("could not find newest executable")
+		}
 	}
 
+	newestExeDir := filepath.Dir(newestExe)
 	u.log(fmt.Sprintf("Restarting with: %s", newestExe))
 
 	// Create restart script
+	pid := os.Getpid()
 	script := fmt.Sprintf(`@echo off
+setlocal enabledelayedexpansion
 cd /d "%s"
 if not exist "%s" mkdir "%s"
 :WAIT_LOOP
@@ -521,10 +638,25 @@ if exist "%s" (
     if exist "%s" goto WAIT_LOOP
 )
 :START_NEW
+set /a PORT_WAIT=0
+:WAIT_PORT
+netstat -ano | findstr /R /C:":8087 .*LISTENING" >nul
+if %%ERRORLEVEL%%==0 (
+    set /a PORT_WAIT+=1
+    if !PORT_WAIT! GEQ 60 goto WAIT_PID
+    timeout /t 1 /nobreak >nul
+    goto WAIT_PORT
+)
+:WAIT_PID
+tasklist /FI "PID eq %d" 2>nul | findstr /R /C:" %d " >nul
+if %%ERRORLEVEL%%==0 (
+    timeout /t 1 /nobreak >nul
+    goto WAIT_PID
+)
 timeout /t 3 /nobreak >nul
 start "" /D "%s" "%s"
 del "%%~f0"
-`, installDir, oldDir, oldDir, currentExe, currentExe, currentExe, backupDest, currentExe, installDir, newestExe)
+`, installDir, oldDir, oldDir, currentExe, currentExe, currentExe, backupDest, currentExe, pid, pid, newestExeDir, newestExe)
 
 	restartScript, err := writeRestartScript(installDir, "restart_koolo_*.bat", script)
 	if err != nil {
