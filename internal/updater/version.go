@@ -1,25 +1,99 @@
 package updater
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"time"
 )
+
+// buildCommitHash is injected at build time via -ldflags.
+var buildCommitHash string
+
+// buildCommitTime is injected at build time via -ldflags (RFC3339).
+var buildCommitTime string
 
 type VersionInfo struct {
 	CommitHash string
 	CommitDate time.Time
 	CommitMsg  string
 	Branch     string
+
+	commitHashFull string
 }
 
-// GetCurrentVersion returns the current local Git version info.
+// GetCurrentVersion returns the current build or local Git version info.
 func GetCurrentVersion() (*VersionInfo, error) {
+	if embedded := getEmbeddedVersion(); embedded != nil {
+		return embedded, nil
+	}
+
 	ctx, err := resolveRepoContext()
 	if err != nil {
 		return nil, err
 	}
 
 	return getCurrentVersion(ctx.RepoDir)
+}
+
+// GetCurrentVersionNoClone returns the current build or local Git version info
+// without cloning a repository if none exists.
+func GetCurrentVersionNoClone() (*VersionInfo, error) {
+	if embedded := getEmbeddedVersion(); embedded != nil {
+		return embedded, nil
+	}
+
+	workDir, err := os.Getwd()
+	if err != nil {
+		return nil, err
+	}
+
+	if root, ok := findGitRoot(workDir); ok {
+		return getCurrentVersion(root)
+	}
+
+	repoDir := filepath.Join(workDir, sourceDirName)
+	isRepo, err := isGitRepo(repoDir)
+	if err != nil {
+		return nil, err
+	}
+	if !isRepo {
+		return nil, nil
+	}
+
+	return getCurrentVersion(repoDir)
+}
+
+func (v *VersionInfo) fullHash() string {
+	if v == nil {
+		return ""
+	}
+	if v.commitHashFull != "" {
+		return v.commitHashFull
+	}
+	return v.CommitHash
+}
+
+func getEmbeddedVersion() *VersionInfo {
+	commitHash := strings.TrimSpace(buildCommitHash)
+	if commitHash == "" {
+		return nil
+	}
+
+	var commitDate time.Time
+	if buildCommitTime != "" {
+		if parsed, err := time.Parse(time.RFC3339, strings.TrimSpace(buildCommitTime)); err == nil {
+			commitDate = parsed
+		}
+	}
+
+	return &VersionInfo{
+		CommitHash:     shortHash(commitHash),
+		CommitDate:     commitDate,
+		CommitMsg:      "",
+		Branch:         "unknown",
+		commitHashFull: commitHash,
+	}
 }
 
 func getCurrentVersion(repoDir string) (*VersionInfo, error) {
@@ -72,9 +146,17 @@ func getCurrentVersion(repoDir string) (*VersionInfo, error) {
 	}
 
 	return &VersionInfo{
-		CommitHash: commitHash[:7], // Short hash
-		CommitDate: commitDate,
-		CommitMsg:  commitMsg,
-		Branch:     branch,
+		CommitHash:     shortHash(commitHash),
+		CommitDate:     commitDate,
+		CommitMsg:      commitMsg,
+		Branch:         branch,
+		commitHashFull: commitHash,
 	}, nil
+}
+
+func shortHash(hash string) string {
+	if len(hash) > 7 {
+		return hash[:7]
+	}
+	return hash
 }

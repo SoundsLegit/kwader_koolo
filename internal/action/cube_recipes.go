@@ -415,7 +415,12 @@ func CubeRecipes() error {
 		return nil
 	}
 
-	itemsInStash := ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash)
+	// Build location list for material search - include DLC tabs if character has DLC
+	locations := []item.LocationType{item.LocationStash, item.LocationSharedStash}
+	if ctx.Data.IsDLC() {
+		locations = append(locations, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab)
+	}
+	itemsInStash := ctx.Data.Inventory.ByLocation(locations...)
 	for _, recipe := range Recipes {
 		// Check if the current recipe is Enabled
 		if !slices.Contains(ctx.CharacterCfg.CubeRecipes.EnabledRecipes, recipe.Name) {
@@ -528,7 +533,13 @@ func CubeRecipes() error {
 func hasItemsForRecipe(ctx *context.Status, recipe CubeRecipe) ([]data.Item, bool) {
 
 	ctx.RefreshGameData()
-	items := ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash)
+
+	// Build location list for material search - include DLC tabs if character has DLC
+	locations := []item.LocationType{item.LocationStash, item.LocationSharedStash}
+	if ctx.Data.IsDLC() {
+		locations = append(locations, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab)
+	}
+	items := ctx.Data.Inventory.ByLocation(locations...)
 
 	if strings.Contains(recipe.Name, "Add Sockets to") {
 		return hasItemsForSocketRecipe(ctx, recipe, items)

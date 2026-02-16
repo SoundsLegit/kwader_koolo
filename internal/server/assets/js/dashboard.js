@@ -131,6 +131,9 @@ function createCharacterCard(key) {
                           <button class="btn btn-outline reset-muling-btn" data-character-name="${key}" title="Reset Muling Progress">
                               <i class="bi bi-arrow-counterclockwise"></i>
                           </button>
+                      <button class="btn btn-outline" onclick="location.href='/armory?character=${key}'" title="Armory">
+                          <i class="bi bi-shield-shaded"></i>
+                      </button>
                       <button class="btn btn-outline" onclick="location.href='/supervisorSettings?supervisor=${key}'" title="Settings">
                           <i class="bi bi-gear"></i>
                       </button>
@@ -415,9 +418,9 @@ function updateSchedulerStatus(container, info) {
 
   // Phase badge
   const phaseClass = info.phase === "playing" ? "phase-playing" :
-                     info.phase === "onBreak" ? "phase-break" : "phase-resting";
+    info.phase === "onBreak" ? "phase-break" : "phase-resting";
   const phaseText = info.phase === "playing" ? "PLAYING" :
-                    info.phase === "onBreak" ? "ON BREAK" : "RESTING";
+    info.phase === "onBreak" ? "ON BREAK" : "RESTING";
   phaseDiv.innerHTML = `<span class="scheduler-phase-badge ${phaseClass}">${phaseText}</span>`;
 
   // Info line

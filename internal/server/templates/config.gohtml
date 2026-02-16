@@ -423,6 +423,17 @@
                         />
                         Save screenshot on error
                     </label>
+                    <label>
+                        <input
+                                {{ if .Debug.OpenOverlayMapOnGameStart }}
+                                    checked="checked"
+                                {{ end }}
+                                type="checkbox"
+                                name="debug_open_overlay_map"
+                                value="true"
+                        />
+                        Open overlay map on game start
+                    </label>
                 </fieldset>
                 <h4>Discord integration</h4>
                 <div style="display:flex; gap:1rem; align-items:center;">
@@ -680,20 +691,27 @@
                     </ul>
                 </div>
                 <div id="updater-section" style="background: var(--bg-elevated); padding: var(--spacing-lg); border-radius: var(--radius-lg); margin-bottom: var(--spacing-lg);">
-                    {{ if .CurrentVersion }}
                     <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: var(--spacing-md); margin-bottom: var(--spacing-md);">
                         <div style="min-width: 0; flex: 1;">
                             <div style="display: flex; align-items: center; gap: 8px;">
                                 <label style="color: var(--text-secondary); font-size: 0.9em;">Current Version</label>
-                                <button type="button" id="current-commits-toggle" aria-expanded="false" aria-controls="current-commits-panel" style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 2px 8px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 0.75em; margin-bottom: 6px;">
+                                <button type="button" id="current-commits-toggle" aria-expanded="false" aria-controls="current-commits-panel" {{ if not .CurrentVersion }}aria-disabled="true" disabled="disabled"{{ end }} style="background: var(--bg-tertiary); border: 1px solid var(--border-color); color: var(--text-primary); padding: 2px 8px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600; font-size: 0.75em; margin-bottom: 6px;{{ if not .CurrentVersion }} color: var(--text-secondary); cursor: not-allowed; opacity: 0.7;{{ end }}">
                                     View current commits
                                 </button>
                             </div>
-                            <div style="color: var(--text-primary); font-weight: 500;">
+                            <div id="current-version-hash" style="color: var(--text-primary); font-weight: 500;">
+                                {{ if .CurrentVersion }}
                                 {{ .CurrentVersion.CommitHash }} - {{ .CurrentVersion.CommitDate }}
+                                {{ else }}
+                                Git version info (.git) not found.
+                                {{ end }}
                             </div>
-                            <div style="color: var(--text-secondary); font-size: 0.85em; margin-top: 4px;">
+                            <div id="current-version-msg" style="color: var(--text-secondary); font-size: 0.85em; margin-top: 4px;">
+                                {{ if .CurrentVersion }}
                                 {{ .CurrentVersion.CommitMsg }}
+                                {{ else }}
+                                Click "Check Updates" to create a .koolo-src Git clone based on the latest commits from kwader2k/koolo.
+                                {{ end }}
                             </div>
                         </div>
                         <div id="updater-tabs" style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-sm); flex-shrink: 0;">
@@ -711,20 +729,6 @@
                     <div id="current-commits-panel" style="display: none; margin-top: 10px; background: var(--bg-tertiary); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 8px 10px; width: 100%;">
                         <div id="current-commits-list" style="max-height: 240px; overflow-y: auto; font-size: 0.85em; color: var(--text-secondary); width: 100%;"></div>
                     </div>
-                    {{ end }}
-                    {{ if not .CurrentVersion }}
-                    <div id="updater-tabs" style="display: flex; gap: var(--spacing-sm); margin-top: var(--spacing-sm);">
-                        <button type="button" id="tab-updates" style="background: var(--accent-blue); color: white; border: 1px solid var(--accent-blue); padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600;">
-                            Updates
-                        </button>
-                        <button type="button" id="tab-prs" style="background: var(--bg-tertiary); border: 1px solid var(--accent-green); color: var(--accent-green); padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600;">
-                            Pull Requests
-                        </button>
-                        <button type="button" id="tab-rollback" style="background: var(--bg-tertiary); border: 1px solid var(--accent-pink); color: var(--accent-pink); padding: 8px 16px; border-radius: var(--radius-sm); cursor: pointer; font-weight: 600;">
-                            Rollback
-                        </button>
-                    </div>
-                    {{ end }}
 
                     <div id="update-panel">
                     <div id="update-info" style="display: none; margin-top: var(--spacing-md);">
@@ -958,6 +962,35 @@ document.addEventListener("DOMContentLoaded", function () {
 
     updatesTab.textContent = 'Check Updates';
 
+    function updateCurrentVersionUI(currentVersion) {
+        if (!currentVersion || !currentVersion.commitHash) {
+            return;
+        }
+
+        const versionHash = document.getElementById('current-version-hash');
+        const versionMsg = document.getElementById('current-version-msg');
+        if (versionHash) {
+            const date = currentVersion.commitDate || 'unknown';
+            versionHash.textContent = `${currentVersion.commitHash} - ${date}`;
+            versionHash.style.color = 'var(--text-primary)';
+            versionHash.style.fontWeight = '500';
+        }
+        if (versionMsg) {
+            versionMsg.textContent = currentVersion.commitMsg || '';
+            versionMsg.style.color = 'var(--text-secondary)';
+            versionMsg.style.fontSize = '0.85em';
+            versionMsg.style.marginTop = '4px';
+        }
+        if (currentCommitsToggle) {
+            currentCommitsToggle.disabled = false;
+            currentCommitsToggle.removeAttribute('aria-disabled');
+            currentCommitsToggle.style.color = 'var(--text-primary)';
+            currentCommitsToggle.style.cursor = 'pointer';
+            currentCommitsToggle.style.opacity = '1';
+        }
+        currentCommitsLoaded = false;
+    }
+
     function setUpdaterTab(tab, refresh) {
         const isUpdates = tab === 'updates';
         const isPRs = tab === 'prs';
@@ -1039,6 +1072,9 @@ document.addEventListener("DOMContentLoaded", function () {
             const ahead = Number(data.commitsAhead) || 0;
             const behind = Number(data.commitsBehind) || 0;
             const aheadCommits = Array.isArray(data.aheadCommits) ? data.aheadCommits : [];
+            if (data.currentVersion && data.currentVersion.commitHash) {
+                updateCurrentVersionUI(data.currentVersion);
+            }
 
             const statusSuffix = ` of and ${behind} commit(s) behind kwader2k/koolo:main.`;
             if (ahead > 0) {

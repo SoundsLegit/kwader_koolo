@@ -34,9 +34,12 @@ func CheckForUpdates() (*UpdateCheckResult, error) {
 	}
 
 	// Get current version
-	currentVersion, err := getCurrentVersion(ctx.RepoDir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get current version: %w", err)
+	currentVersion := getEmbeddedVersion()
+	if currentVersion == nil {
+		currentVersion, err = getCurrentVersion(ctx.RepoDir)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get current version: %w", err)
+		}
 	}
 
 	// Ensure upstream remote is configured
@@ -55,7 +58,8 @@ func CheckForUpdates() (*UpdateCheckResult, error) {
 	}
 
 	// Get ahead/behind counts
-	countCmd := gitCmd(ctx.RepoDir, "rev-list", "--left-right", "--count", "HEAD...upstream/main")
+	baseRef := comparisonBaseRef(ctx.RepoDir, currentVersion)
+	countCmd := gitCmd(ctx.RepoDir, "rev-list", "--left-right", "--count", fmt.Sprintf("%s...upstream/main", baseRef))
 	countOut, err := countCmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("failed to compare with upstream: %w", err)
@@ -65,7 +69,7 @@ func CheckForUpdates() (*UpdateCheckResult, error) {
 	result.HasUpdates = result.CommitsBehind > 0
 
 	if result.CommitsAhead > 0 {
-		aheadLogCmd := gitCmd(ctx.RepoDir, "log", "--pretty=format:%H|%ci|%s", "upstream/main..HEAD", "-n", "10")
+		aheadLogCmd := gitCmd(ctx.RepoDir, "log", "--pretty=format:%H|%ci|%s", fmt.Sprintf("upstream/main..%s", baseRef), "-n", "10")
 		aheadLogOut, err := aheadLogCmd.Output()
 		if err == nil {
 			lines := strings.Split(strings.TrimSpace(string(aheadLogOut)), "\n")
@@ -98,7 +102,7 @@ func CheckForUpdates() (*UpdateCheckResult, error) {
 	}
 
 	// Get list of new commits (up to 10)
-	logCmd := gitCmd(ctx.RepoDir, "log", "--pretty=format:%H|%ci|%s", "HEAD..upstream/main", "-n", "10")
+	logCmd := gitCmd(ctx.RepoDir, "log", "--pretty=format:%H|%ci|%s", fmt.Sprintf("%s..upstream/main", baseRef), "-n", "10")
 	logOut, err := logCmd.Output()
 	if err != nil {
 		return result, nil // Return partial result
@@ -124,6 +128,20 @@ func CheckForUpdates() (*UpdateCheckResult, error) {
 	}
 
 	return result, nil
+}
+
+func comparisonBaseRef(repoDir string, current *VersionInfo) string {
+	if current == nil {
+		return "HEAD"
+	}
+	fullHash := current.fullHash()
+	if fullHash == "" {
+		return "HEAD"
+	}
+	if err := gitCmd(repoDir, "cat-file", "-e", fmt.Sprintf("%s^{commit}", fullHash)).Run(); err != nil {
+		return "HEAD"
+	}
+	return fullHash
 }
 
 // GetCurrentCommits returns recent commits from the current HEAD.

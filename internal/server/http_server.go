@@ -313,6 +313,11 @@ func New(logger *slog.Logger, manager *bot.SupervisorManager, scheduler *bot.Sch
 		DropCardInfo: make(map[string]dropCardInfo),
 	}
 
+	server.updater.SetPreRestartCallback(func() error {
+		server.logger.Info("Stopping HTTP server before restart")
+		return server.Stop()
+	})
+
 	server.initDropCallbacks()
 	return server, nil
 }
@@ -474,6 +479,13 @@ func containss(slice []string, item string) bool {
 		}
 	}
 	return false
+}
+
+func formatCommitDate(t time.Time) string {
+	if t.IsZero() {
+		return "unknown"
+	}
+	return t.Format("2006-01-02 15:04:05")
 }
 
 func resolveSkillClassFromBuild(build string) string {
@@ -971,6 +983,7 @@ func (s *HttpServer) Listen(port int) error {
 	http.HandleFunc("/armory", s.armoryPage)
 	http.HandleFunc("/api/armory", s.armoryAPI)
 	http.HandleFunc("/api/armory/characters", s.armoryCharactersAPI)
+	http.HandleFunc("/api/armory/all", s.armoryAllAPI)
 
 	s.registerDropRoutes()
 
@@ -1543,11 +1556,11 @@ func validateSchedulerData(cfg *config.CharacterCfg) error {
 }
 
 func (s *HttpServer) getVersionData() *VersionData {
-	versionInfo, _ := updater.GetCurrentVersion()
+	versionInfo, _ := updater.GetCurrentVersionNoClone()
 	if versionInfo != nil {
 		return &VersionData{
 			CommitHash: versionInfo.CommitHash,
-			CommitDate: versionInfo.CommitDate.Format("2006-01-02 15:04:05"),
+			CommitDate: formatCommitDate(versionInfo.CommitDate),
 			CommitMsg:  versionInfo.CommitMsg,
 			Branch:     versionInfo.Branch,
 		}
@@ -1577,6 +1590,7 @@ func (s *HttpServer) config(w http.ResponseWriter, r *http.Request) {
 		// Debug
 		newConfig.Debug.Log = r.Form.Get("debug_log") == "true"
 		newConfig.Debug.Screenshots = r.Form.Get("debug_screenshots") == "true"
+		newConfig.Debug.OpenOverlayMapOnGameStart = r.Form.Get("debug_open_overlay_map") == "true"
 		// Discord
 		newConfig.Discord.Enabled = r.Form.Get("discord_enabled") == "true"
 		newConfig.Discord.EnableGameCreatedMessages = r.Form.Has("enable_game_created_messages")
@@ -1684,12 +1698,12 @@ func (s *HttpServer) config(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get current version info
-	versionInfo, _ := updater.GetCurrentVersion()
+	versionInfo, _ := updater.GetCurrentVersionNoClone()
 	var versionData *VersionData
 	if versionInfo != nil {
 		versionData = &VersionData{
 			CommitHash: versionInfo.CommitHash,
-			CommitDate: versionInfo.CommitDate.Format("2006-01-02 15:04:05"),
+			CommitDate: formatCommitDate(versionInfo.CommitDate),
 			CommitMsg:  versionInfo.CommitMsg,
 			Branch:     versionInfo.Branch,
 		}
@@ -1718,6 +1732,7 @@ type ConfigUpdateOptions struct {
 	Scheduler           bool `json:"scheduler"`
 	Muling              bool `json:"muling"`
 	Shopping            bool `json:"shopping"`
+	CharacterCreation   bool `json:"characterCreation"` // Auto-create character setting
 	UpdateAllRunDetails bool `json:"updateAllRunDetails"`
 }
 
@@ -1736,6 +1751,11 @@ func (s *HttpServer) updateConfigFromForm(values url.Values, cfg *config.Charact
 		cfg.Realm = values.Get("realm")
 		cfg.AuthMethod = values.Get("authmethod")
 		cfg.AuthToken = values.Get("AuthToken")
+	}
+
+	// Character Creation Settings
+	if sections.CharacterCreation {
+		cfg.AutoCreateCharacter = values.Has("autoCreateCharacter")
 	}
 
 	// Client Settings
@@ -3711,7 +3731,7 @@ func buildTZGroups() []TZGroup {
 // Updater handlers
 
 func (s *HttpServer) getVersion(w http.ResponseWriter, r *http.Request) {
-	version, err := updater.GetCurrentVersion()
+	version, err := updater.GetCurrentVersionNoClone()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to get version: %v", err), http.StatusInternalServerError)
 		return
@@ -3720,7 +3740,7 @@ func (s *HttpServer) getVersion(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"commitHash": version.CommitHash,
-		"commitDate": version.CommitDate.Format("2006-01-02 15:04:05"),
+		"commitDate": formatCommitDate(version.CommitDate),
 		"commitMsg":  version.CommitMsg,
 		"branch":     version.Branch,
 	})
@@ -3764,7 +3784,7 @@ func (s *HttpServer) checkUpdates(w http.ResponseWriter, r *http.Request) {
 		"newCommits":    commits,
 		"currentVersion": map[string]interface{}{
 			"commitHash": result.CurrentVersion.CommitHash,
-			"commitDate": result.CurrentVersion.CommitDate.Format("2006-01-02 15:04:05"),
+			"commitDate": formatCommitDate(result.CurrentVersion.CommitDate),
 			"commitMsg":  result.CurrentVersion.CommitMsg,
 			"branch":     result.CurrentVersion.Branch,
 		},

@@ -19,6 +19,7 @@
 //[name] == mithrilcoil 		&& [quality] == unique && [flag] != ethereal # [damageresist] >= 15																								// verdungo's hearty cord
 //[name] == mithrilcoil 		&& [quality] == unique && [flag] != ethereal # [damageresist] >= 15	&& [vitality] >= 40 																		// verdungo's hearty cord
 //[name] == mithrilcoil 		&& [quality] == unique && [flag] != ethereal # [damageresist] >= 15	&& [vitality] >= 40 && [hpregen] >= 13 && [enhanceddefense] >= 140 && [maxstamina] >= 120 	// verdungo's hearty cord perfect
+[name] == trollbelt 			&& [quality] == unique # [frw] >= 10 && [fcr] >= 10 && [fhr] >= 10 && [enhanceddefense] >= 90 && [fireresist] >= 5 && [itemgoldbonus] >= 44 					 //Gheed's Wager
 
 // unique boots
 //[name] == lightplatedboots 	&& [quality] == unique && [flag] != ethereal # [enhanceddefense] >= 60																							// goblin toes perfect
@@ -37,6 +38,7 @@
 //[name] == boneweaveboots 		&& [quality] == unique && [flag] != ethereal # [enhanceddefense] >= 200 && [skillskeletonmastery] >= 2 && [strength] >= 20										// marrowwalk perfect
 //[name] == myrmidongreaves 	&& [quality] == unique && [flag] != ethereal # [shadowdisciplinesskilltab] >= 2 && [dexterity] >= 25 && [enhanceddefense] >= 100								// shadow dancer perfect
 //[name] == myrmidongreaves 	&& [quality] == unique && [flag] != ethereal # [shadowdisciplinesskilltab] >= 2 && [dexterity] >= 25															// shadow dancer
+[name] == mirroredboots 		&& [quality] == unique # [defense] >= 40 && [dexterity] >= 10 && [energy] >= 10 																				// Wraithstep 
 
 // unique helms
 //[name] == sallet 				&& [quality] == unique && [flag] != ethereal # [enhanceddefense] >= 220 && [coldresist] >= 40 && [fireresist] >= 50 && [lightresist] >= 40						// rock stopper perfect
@@ -64,6 +66,7 @@
 //[name] == diadem 				&& [quality] == unique && [flag] != ethereal # [passiveltngmastery] >= 15 && [passiveltngpierce] >= 20															// griffon's eye
 //[name] == corona 				&& [quality] == unique # [sockets] >= 2 && [damageresist] >= 15 && [fireresist] >= 30 && [plusdefense] >= 150													// crown of ages perfect
 //[name] == corona 				&& [quality] == unique # [sockets] >= 2 && [damageresist] >= 15																									// crown of ages
+[name] == deathmask 			&& [quality] == unique # [ias] >= 20 && [fcr] >= 20     																										// Hellwarden's Will
 
 // unique armor
 [name] == fullplatemail 		&& [quality] == unique && [flag] == ethereal # [enhanceddefense] >= 150																							// eth goldskin perfect
@@ -126,6 +129,7 @@
 [name] == fangedknife 			&& [quality] == unique && [flag] == ethereal # [enhanceddamage] >= 300																							// fleshripper perfect
 [name] == fangedknife 			&& [quality] == unique && [flag] != ethereal # [enhanceddamage] >= 300																							// eth fleshripper perfect
 [name] == legendspike 			&& [quality] == unique # [enhanceddamage] >= 240																												// eth ghostflame perfect
+[name] == mithrilpoint 			&& [quality] == unique  																																		// Bloodpact Shard
 
 // unique swords
 //[name] == tulwar 				&& [quality] == unique && [flag] != ethereal # [dexterity] >= 15 && [enhanceddamage] >= 120																		// blade of ali baba perfect
@@ -135,6 +139,7 @@
 [name] == battlesword 			&& [quality] == unique && [flag] == ethereal																													// eth headstriker perfect
 [name] == espandon 				&& [quality] == unique && [flag] != ethereal # [enhanceddamage] >= 200																							// crainte vomir perfect
 [name] == espandon 				&& [quality] == unique && [flag] == ethereal # [enhanceddamage] >= 200																							// eth crainte vomir perfect
+[name] == legendsword 			&& [quality] == unique # [enhanceddamage] >= 133 && [manaleech] >= 3 																							// Dreadfang
 
 // unique axes
 //[name] == cleaver 			&& [quality] == unique # [enhanceddamage] >= 200																												// butcher's pupil perfect
@@ -244,6 +249,12 @@
 //[name] == gildedshield 		&& [quality] == unique && [flag] == ethereal # [enhanceddefense] >= 200																							// eth herald of zakarum perfect	
 [name] == zakarumshield 		&& [quality] == unique # [enhanceddefense] >= 200 && [itemabsorbfirepercent] >= 20 && [strength] >= 25															// dragonscale perfect
 
+// unique warlock
+[name] == blasphemousgrimoire   && [quality] == unique && [flag] != ethereal # [enhanceddefense] >= 170 && [itemmanaafterkill] >= 5 && [fireresist] >= 20    									// Ars Al'Diablolos
+[name] == occulttome            && [quality] == unique && [flag] != ethereal # [enhanceddefense] >= 140 && [enhanceddamage] >= 70                            									// Ars Dul'Mephistos
+[name] == blasphemousbompendium && [quality] == unique && [flag] != ethereal # [enhanceddefense] >= 120 && [damageresist] >= 5                                									// Ars Tor'Baalos
+[name] == burnttext             && [quality] == unique && [flag] != ethereal # [enhanceddefense] >= 130 && [fireresist] >= 20                                									// Measured Wrath
+
 // unique rings
 [type] == ring 					&& [quality] == unique # [itemmagicbonus] >= 30 && [tohit] >= 75																								// nagelring perfect
 [type] == ring 					&& [quality] == unique # [itemmagicbonus] >= 30																													// nagelring
@@ -257,6 +268,9 @@
 [type] == ring 					&& [quality] == unique # [poisonresist] >= 30 && [normaldamagereduction] >= 7																					// nature's peace perfect
 //[type] == ring 				&& [quality] == unique # [itemabsorblightpercent] >= 20 && [itemmagicbonus] >= 20																				// wisp protector perfect
 [type] == ring 					&& [quality] == unique # [itemabsorblightpercent] >= 20																											// wisp protector
+[name] == ring 					&& [quality] == unique # [magicresist] >= -3 && [energy] >= 10 && [itemmagicbonus] >= 10 																		// Sling 
+[name] == ring 					&& [quality] == unique # [fcr] >= 10      																														// Opalvein
+[name] == amulet 				&& [quality] == unique # [fcr] >= 5 && [lightresist] >=25       																								// Entropy Locket
 
 // unique amulets
 [type] == amulet 				&& [quality] == unique # [fireresist] >= 50 																													// nokozan relic
@@ -275,6 +289,8 @@
 [name] == jewel 				&& [quality] == unique # [itemskillondeath] >= 1 && [passivefiremastery] >= 5 && [passivefirepierce] >= 5														// rainbow facet fire die
 [name] == jewel 				&& [quality] == unique # [itemskillondeath] >= 1 && [passiveltngmastery] >= 5 && [passiveltngpierce] >= 5														// rainbow facet light die
 
+[name] == jewel 				&& [quality] == unique # [itemgoldbonus] >= 25																													//rotw jewels
+
 // unique charms
 //[name] == grandcharm 			&& [quality] == unique # [itemmagicbonus] >= 40 && [itemgoldbonus] >= 160 && [itemreducedprices] >= 10															// gheed's fortune perfect
 [name] == grandcharm 			&& [quality] == unique # [itemmagicbonus] >= 40																													// gheed's fortune
@@ -285,3 +301,4 @@
 //[name] == largecharm 			&& [quality] == unique # [strength] >= 19 && [fireresist] >= 19 && [itemaddnecromancerskills] == 3																// hellfire torch necromancer
 //[name] == largecharm 			&& [quality] == unique # [strength] >= 10 && [fireresist] >= 10 && [itemaddsorceressskills] == 3																// hellfire torch sorceress
 //[name] == largecharm 			&& [quality] == unique # [strength] >= 10 && [fireresist] >= 10 && [itemaddpaladinskills] == 3																	// hellfire torch paladin
+//[name] == largecharm 			&& [quality] == unique # [strength] >= 10 && [fireresist] >= 10 && [itemaddwarlockskills] == 3																	// hellfire torch warlock
