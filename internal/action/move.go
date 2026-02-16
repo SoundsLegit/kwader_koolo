@@ -30,7 +30,7 @@ import (
 
 const (
 	maxAreaSyncAttempts   = 10
-	areaSyncDelay         = 100 * time.Millisecond
+	areaSyncDelay         = 200 * time.Millisecond
 	monsterHandleCooldown = 500 * time.Millisecond // Reduced cooldown for more immediate re-engagement
 	lootAfterCombatRadius = 25                     // Define a radius for looting after combat
 )
@@ -91,7 +91,7 @@ func ensureAreaSync(ctx *context.Status, expectedArea area.ID) error {
 	}
 
 	// Wait for area data to sync
-	for attempts := 0; attempts < maxAreaSyncAttempts; attempts++ {
+	for attempts := range maxAreaSyncAttempts {
 		ctx.RefreshGameData()
 
 		// Check for death during area sync
@@ -107,9 +107,10 @@ func ensureAreaSync(ctx *context.Status, expectedArea area.ID) error {
 				// Additional check: ensure we have adjacent level data if this is a cross-area operation
 				// Give it one more refresh cycle to ensure all data is populated
 				if attempts > 0 {
-					time.Sleep(100 * time.Millisecond)
+					time.Sleep(areaSyncDelay + 50*time.Millisecond)
 					ctx.RefreshGameData()
 				}
+
 				return nil
 			}
 		}
@@ -387,6 +388,12 @@ func MoveTo(toFunc func() (data.Position, bool), options ...step.MoveOption) err
 	ctx := context.Get()
 	ctx.SetLastAction("MoveTo")
 
+	// Initialize PathStuckDetector if not already present
+	if ctx.PathStuckDetector == nil {
+		ctx.PathStuckDetector = NewPathStuckDetector()
+	}
+	pathStuckDetector := ctx.PathStuckDetector.(*PathStuckDetector)
+
 	// Initialize options
 	opts := &step.MoveOpts{}
 
@@ -551,6 +558,11 @@ func MoveTo(toFunc func() (data.Position, bool), options ...step.MoveOption) err
 			previousTargetPosition = targetPosition
 			path, _, pathFound = ctx.PathFinder.GetPath(targetPosition)
 			pathOffsetX, pathOffsetY = getPathOffsets(targetPosition)
+
+			// Apply blacklisted points if any exist
+			if pathStuckDetector.HasBlacklistedPoints() {
+				path = filterBlacklistedPointsFromPath(path, pathStuckDetector, pathOffsetX, pathOffsetY)
+			}
 		}
 
 		distanceToTarget = ctx.PathFinder.DistanceFromMe(targetPosition)
@@ -643,6 +655,7 @@ func MoveTo(toFunc func() (data.Position, bool), options ...step.MoveOption) err
 			}
 
 			//We've reach the final destination
+			pathStuckDetector.Reset() // Reset stuck detection when destination reached
 			return nil
 		} else {
 			adjustMinDist = false
@@ -691,6 +704,32 @@ func MoveTo(toFunc func() (data.Position, bool), options ...step.MoveOption) err
 
 		//Do the actual movement...
 		moveErr := step.MoveTo(nextPosition, moveOptions...)
+
+		// Check for stuck detection (timer-based)
+		if pathStuckDetector.Update(ctx.Data.PlayerUnit.Position, ctx.Data.PlayerUnit.Area) {
+			ctx.Logger.Warn("Path stuck detected - player hasn't moved for 5 seconds. Blacklisting current and next positions and recalculating path.")
+
+			// Get the next step along the path for blacklisting
+			var nextStepPosition data.Position
+			if pathStep < len(path) {
+				nextStepPosition = utils.PositionAddCoords(path[pathStep], pathOffsetX, pathOffsetY)
+			} else {
+				nextStepPosition = nextPosition
+			}
+
+			// Blacklist the stuck positions
+			pathStuckDetector.OnStuckDetected(ctx.Data.PlayerUnit.Position, nextStepPosition)
+
+			// Force path recalculation with blacklisted points
+			previousTargetPosition = (data.Position{})
+			pathFound = false
+
+			// Try a random movement to help unstick
+			ctx.PathFinder.RandomMovement()
+			time.Sleep(time.Millisecond * 300)
+			continue
+		}
+
 		if moveErr != nil {
 			//... Reset previous target position to recompute path...
 			previousTargetPosition = (data.Position{})
@@ -827,6 +866,28 @@ func findClosestShrine(maxScanDistance float64) *data.Object {
 	}
 
 	return nil
+}
+
+// filterBlacklistedPointsFromPath removes waypoints that fall within blacklisted areas
+func filterBlacklistedPointsFromPath(path pather.Path, detector *PathStuckDetector, offsetX, offsetY int) pather.Path {
+	if !detector.HasBlacklistedPoints() {
+		return path
+	}
+
+	filtered := make(pather.Path, 0, len(path))
+	for _, waypoint := range path {
+		globalPos := utils.PositionAddCoords(waypoint, offsetX, offsetY)
+		if !detector.IsPointBlacklisted(globalPos) {
+			filtered = append(filtered, waypoint)
+		}
+	}
+
+	// If filtering removed all waypoints, return original path to avoid getting completely stuck
+	if len(filtered) == 0 {
+		return path
+	}
+
+	return filtered
 }
 
 func getArcaneNextTeleportPadPosition(blacklistedPads []data.Object) (data.Object, error) {

@@ -13,6 +13,10 @@ import (
 	"github.com/hectorgimenez/koolo/internal/utils"
 )
 
+// MaxWaypointDistance is the maximum Chebyshev distance (in tiles) allowed between consecutive
+// waypoints in a path. This ensures that every point along the path is reachable.
+const MaxWaypointDistance = 7
+
 type PathFinder struct {
 	gr           *game.MemoryReader
 	data         *game.Data
@@ -446,7 +450,106 @@ func (pf *PathFinder) GetPathFrom(from, to data.Position) (Path, int, bool) {
 		path = newPath
 	}
 
+	// Ensure every point along the path is reachable (max 7 points away)
+	path = ensurePathReachability(path)
+
 	return path, distance, found
+}
+
+// ensurePathReachability validates that every consecutive pair of points in the path
+// is at most MaxWaypointDistance tiles away (using Chebyshev distance). If any points exceed this distance,
+// intermediate waypoints are inserted.
+func ensurePathReachability(path Path) Path {
+	if len(path) <= 1 {
+		return path
+	}
+
+	validatedPath := make(Path, 0, len(path)*2)
+	validatedPath = append(validatedPath, path[0])
+
+	for i := 1; i < len(path); i++ {
+		prev := validatedPath[len(validatedPath)-1]
+		curr := path[i]
+
+		// Calculate raw distances
+		rawDx := curr.X - prev.X
+		rawDy := curr.Y - prev.Y
+
+		// Get absolute values and direction
+		dx := rawDx
+		if dx < 0 {
+			dx = -dx
+		}
+		dy := rawDy
+		if dy < 0 {
+			dy = -dy
+		}
+
+		// Use Chebyshev distance (maximum of absolute differences)
+		dist := dx
+		if dy > dist {
+			dist = dy
+		}
+
+		// If distance exceeds max, insert intermediate waypoints
+		if dist > MaxWaypointDistance {
+			// Calculate step direction (normalized to -1, 0, or 1)
+			stepX := 0
+			stepY := 0
+			if rawDx > 0 {
+				stepX = 1
+			} else if rawDx < 0 {
+				stepX = -1
+			}
+			if rawDy > 0 {
+				stepY = 1
+			} else if rawDy < 0 {
+				stepY = -1
+			}
+
+			// Add waypoints moving in MaxWaypointDistance steps until we can reach the destination
+			current := prev
+			for current != curr {
+				// Calculate next waypoint (up to MaxWaypointDistance tiles away)
+				nextX := current.X + stepX*MaxWaypointDistance
+				nextY := current.Y + stepY*MaxWaypointDistance
+				nextWaypoint := data.Position{X: nextX, Y: nextY}
+
+				// Check distance from next waypoint to target
+				nextToTargetDx := curr.X - nextWaypoint.X
+				if nextToTargetDx < 0 {
+					nextToTargetDx = -nextToTargetDx
+				}
+				nextToTargetDy := curr.Y - nextWaypoint.Y
+				if nextToTargetDy < 0 {
+					nextToTargetDy = -nextToTargetDy
+				}
+				nextToTargetDist := nextToTargetDx
+				if nextToTargetDy > nextToTargetDist {
+					nextToTargetDist = nextToTargetDy
+				}
+
+				if nextToTargetDist <= MaxWaypointDistance {
+					// From nextWaypoint, we can reach the target directly
+					// Add the nextWaypoint but DON'T set current=curr yet,
+					// we'll add curr after exiting the loop
+					validatedPath = append(validatedPath, nextWaypoint)
+					break
+				} else {
+					// nextWaypoint is still too far, add it as intermediate and continue
+					validatedPath = append(validatedPath, nextWaypoint)
+					current = nextWaypoint
+				}
+			}
+			// Always add the final target point
+			validatedPath = append(validatedPath, curr)
+		} else {
+			// Distance is acceptable, add the point directly
+			validatedPath = append(validatedPath, curr)
+		}
+	}
+
+	return validatedPath
 }
 
 func (pf *PathFinder) mergeGrids(to data.Position, canTeleport bool) (*game.Grid, error) {

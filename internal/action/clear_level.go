@@ -51,7 +51,7 @@ func ClearCurrentLevelEx(openChests bool, filter data.MonsterFilter, shouldInter
 		// First, clear the room of monsters
 		err := clearRoom(r, filter)
 		if err != nil {
-			ctx.Logger.Warn("Failed to clear room: %v", err)
+			ctx.Logger.Warn("Failed to clear room", slog.Any("error", err))
 		}
 
 		//ctx.Logger.Debug(fmt.Sprintf("Clearing room complete, attempting to pickup items in a radius of %d", pickupRadius))
