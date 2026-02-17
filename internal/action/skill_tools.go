@@ -505,6 +505,7 @@ func calculateSkillPositionInUI(mainSkill bool, skillID skill.ID) (data.Position
 	descs := make(map[skill.ID]skill.Skill)
 	totalRows := make([]int, 0)
 	pageSkills := make(map[int][]skill.ID)
+	nonClassSkills := make(map[int][]skill.ID)
 	row := 0
 	column := 0
 	for skID := range ctx.Data.PlayerUnit.Skills {
@@ -518,7 +519,15 @@ func calculateSkillPositionInUI(mainSkill bool, skillID skill.ID) (data.Position
 			continue
 		}
 		// Skip skills with charges
-		if ctx.Data.PlayerUnit.Skills[skID].Charges > 0 {
+		if ctx.Data.PlayerUnit.Skills[skID].Charges > 0 || ctx.Data.PlayerUnit.Skills[skID].Quantity > 0 {
+			if !ctx.GameReader.LegacyGraphics() {
+				nonClassSkills[sk.Desc().Page] = append(nonClassSkills[sk.Desc().Page], skID)
+
+				if sk.ID == skill.TomeOfTownPortal {
+					totalRows = append(totalRows, sk.Desc().ListRow)
+				}
+			}
+
 			continue
 		}
 		descs[skID] = sk
@@ -529,7 +538,9 @@ func calculateSkillPositionInUI(mainSkill bool, skillID skill.ID) (data.Position
 	}
 	if !foundInSkills {
 		totalRows = append(totalRows, targetSkill.Desc().ListRow)
-		pageSkills[targetSkill.Desc().Page] = append(pageSkills[targetSkill.Desc().Page], skillID)
+		if ctx.GameReader.LegacyGraphics() {
+			pageSkills[targetSkill.Desc().Page] = append(pageSkills[targetSkill.Desc().Page], skillID)
+		}
 	}
 	if ctx.GameReader.LegacyGraphics() && !mainSkill && skillID == skill.TomeOfTownPortal {
 		if _, hasIdentify := ctx.Data.Inventory.Find(item.TomeOfIdentify, item.LocationInventory); hasIdentify {
@@ -542,20 +553,47 @@ func calculateSkillPositionInUI(mainSkill bool, skillID skill.ID) (data.Position
 	}
 	slices.Sort(totalRows)
 	totalRows = slices.Compact(totalRows)
+
 	for i, currentRow := range totalRows {
 		if currentRow == targetSkill.Desc().ListRow {
 			row = i
 			break
 		}
 	}
+
+	isChargeOrQuantitySkill := ctx.Data.PlayerUnit.Skills[skillID].Charges > 0 || ctx.Data.PlayerUnit.Skills[skillID].Quantity > 0
 	skillsInPage := pageSkills[targetSkill.Desc().Page]
-	slices.Sort(skillsInPage)
-	for i, skills := range skillsInPage {
-		if skills == targetSkill.ID {
-			column = i
-			break
+	nonClassSkillsInRow := make([]skill.ID, 0)
+	skillsInRow := make([]skill.ID, 0)
+
+	if !isChargeOrQuantitySkill || ctx.GameReader.LegacyGraphics() {
+		slices.Sort(skillsInPage)
+		for _, skID := range skillsInPage {
+			if skill.Skills[skID].Desc().ListRow == targetSkill.Desc().ListRow {
+				skillsInRow = append(skillsInRow, skID)
+			}
+		}
+		slices.Sort(skillsInRow)
+		for i, skills := range skillsInRow {
+			if skills == targetSkill.ID {
+				column = i
+				break
+			}
+		}
+	} else {
+		for _, skills := range nonClassSkills {
+			nonClassSkillsInRow = append(nonClassSkillsInRow, skills...)
+		}
+		slices.Sort(nonClassSkillsInRow)
+
+		for i, skills := range nonClassSkillsInRow {
+			if skills == targetSkill.ID {
+				column = i
+				break
+			}
 		}
 	}
+
 	// Special handling for Legacy + secondary list + TomeOfTownPortal:
 	if ctx.GameReader.LegacyGraphics() && !mainSkill && skillID == skill.TomeOfTownPortal {
 		if _, hasIdentify := ctx.Data.Inventory.Find(item.TomeOfIdentify, item.LocationInventory); hasIdentify {
@@ -582,10 +620,15 @@ func calculateSkillPositionInUI(mainSkill bool, skillID skill.ID) (data.Position
 			Y: ui.SkillListFirstSkillYClassic - ui.SkillListSkillOffsetClassic*row,
 		}, true
 	}
-	skillOffsetX := ui.MainSkillListFirstSkillX - (ui.SkillListSkillOffset * (len(skillsInPage) - (column + 1)))
+	skillOffsetX := ui.MainSkillListFirstSkillX - (ui.SkillListSkillOffset * (len(skillsInRow) - (column + 1)))
 	if !mainSkill {
-		skillOffsetX = ui.SecondarySkillListFirstSkillX + (ui.SkillListSkillOffset * (len(skillsInPage) - (column + 1)))
+		if !isChargeOrQuantitySkill {
+			skillOffsetX = ui.SecondarySkillListFirstSkillX + (ui.SkillListSkillOffset * (len(skillsInRow) - (column + 1)))
+		} else {
+			skillOffsetX = ui.SecondarySkillListFirstSkillX + (ui.SkillListSkillOffset * (len(nonClassSkillsInRow) - (column + 1)))
+		}
 	}
+
 	return data.Position{
 		X: skillOffsetX,
 		Y: ui.SkillListFirstSkillY - ui.SkillListSkillOffset*row,
