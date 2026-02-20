@@ -15,30 +15,33 @@ import (
 )
 
 func doesExceedQuantity(rule nip.Rule) bool {
-	ctx := context.Get()
-	ctx.SetLastAction("doesExceedQuantity")
+    ctx := context.Get()
+    ctx.SetLastAction("doesExceedQuantity")
 
-	stashItems := ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash)
+    stashItems := ctx.Data.Inventory.ByLocation(
+        item.LocationStash,
+        item.LocationSharedStash,
+        item.LocationRunesTab,
+        item.LocationGemsTab,
+        item.LocationMaterialsTab,
+    )
+    stashItems = FilterDLCGhostItems(stashItems)
 
-	maxQuantity := rule.MaxQuantity()
-	if maxQuantity == 0 {
-		return false
-	}
+    maxQuantity := rule.MaxQuantity()
+    if maxQuantity == 0 {
+        return false
+    }
 
-	if maxQuantity == 0 {
-		return false
-	}
+    matchedItemsInStash := 0
 
-	matchedItemsInStash := 0
+    for _, stashItem := range stashItems {
+        res, _ := rule.Evaluate(stashItem)
+        if res == nip.RuleResultFullMatch {
+            matchedItemsInStash += GetItemQuantity(stashItem)
+        }
+    }
 
-	for _, stashItem := range stashItems {
-		res, _ := rule.Evaluate(stashItem)
-		if res == nip.RuleResultFullMatch {
-			matchedItemsInStash += 1
-		}
-	}
-
-	return matchedItemsInStash >= maxQuantity
+    return matchedItemsInStash >= maxQuantity
 }
 
 func DropMouseItem() {
