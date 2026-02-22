@@ -5,6 +5,7 @@ import "github.com/hectorgimenez/d2go/pkg/data/item"
 var AvailableRunewordRecipes = []string{
 	// List out all the recipe names from runeword_recipes.go
 	string(item.RunewordAncientsPledge),
+	string(item.RunewordAuthority),
 	string(item.RunewordBeast),
 	string(item.RunewordBlack),
 	string(item.RunewordBone),
@@ -17,6 +18,7 @@ var AvailableRunewordRecipes = []string{
 	string(item.RunewordChaos),
 	string(item.RunewordCrescentMoon),
 	string(item.RunewordCure),
+	string(item.RunewordCoven),
 	string(item.RunewordDeath),
 	string(item.RunewordDelerium),
 	string(item.RunewordDestruction),
@@ -77,6 +79,7 @@ var AvailableRunewordRecipes = []string{
 	string(item.RunewordRain),
 	string(item.RunewordRhyme),
 	string(item.RunewordRift),
+	string(item.RunewordRitual),
 	string(item.RunewordSanctuary),
 	string(item.RunewordSilence),
 	string(item.RunewordSmoke),
@@ -90,7 +93,9 @@ var AvailableRunewordRecipes = []string{
 	string(item.RunewordTreachery),
 	string(item.RunewordUnbendingWill),
 	string(item.RunewordVenom),
+	string(item.RunewordVigilance),
 	string(item.RunewordVoiceOfReason),
+	string(item.RunewordVoid),
 	string(item.RunewordWealth),
 	string(item.RunewordWhite),
 	string(item.RunewordWind),

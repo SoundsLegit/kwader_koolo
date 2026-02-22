@@ -24,7 +24,7 @@ type Data struct {
 	data.Data
 	CharacterCfg        config.CharacterCfg
 	IsLevelingCharacter bool
-	ExpChar             uint16 // 1=Classic, 2=LoD, 3=DLC (auto-detected from memory)
+	ExpChar             uint // 1=Classic, 2=LoD, 3=DLC (auto-detected from memory)
 }
 
 // IsDLC returns true if the current character has the DLC expansion (ExpChar >= 3).

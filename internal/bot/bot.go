@@ -109,8 +109,10 @@ func (b *Bot) Run(ctx context.Context, firstRun bool, runs []run.Run) error {
 	// Cleanup the current game helper structure
 	b.ctx.Cleanup()
 
-	// Switch to legacy mode if configured
-	action.SwitchToLegacyMode()
+	// Switch to legacy mode if configured and character is not a DLC-Character
+	if !b.ctx.Data.IsDLC() {
+		action.SwitchToLegacyMode()
+	}
 	b.ctx.RefreshGameData()
 
 	b.ctx.Logger.Info("Game loaded", slog.String("expansion", b.ctx.Data.ExpCharLabel()))
@@ -246,8 +248,8 @@ func (b *Bot) Run(ctx context.Context, firstRun bool, runs []run.Run) error {
 					time.Sleep(200 * time.Millisecond)
 				}
 
-				// Legacy/Portrait/Chat checks (Fast, Read-only/Input-gated)
-				if b.ctx.CharacterCfg.ClassicMode && !b.ctx.Data.LegacyGraphics {
+				// Legacy/Portrait/Chat checks (Fast, Read-only/Input-gated) only for non DLC Characters
+				if b.ctx.CharacterCfg.ClassicMode && !b.ctx.Data.LegacyGraphics && !b.ctx.Data.IsDLC() {
 					action.SwitchToLegacyMode()
 					time.Sleep(150 * time.Millisecond)
 				}

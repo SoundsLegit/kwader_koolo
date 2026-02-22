@@ -274,50 +274,57 @@ const (
 	VendorTabStartY = SwitchStashTabBtnY
 	VendorTabSize   = SwitchStashTabBtnTabSize
 
-	CharCreateBtnX = 1175
-	CharCreateBtnY = 675
+	CharCreateBtnX = 1150
+	CharCreateBtnY = 670
 	CharBackBtnX   = 105
 	CharBackBtnY   = 675
-	CharToggleBtnX = 1165
-	CharToggleBtnY = 60
 
-	CharNameInputX  = 640
-	CharNameInputY  = 530
-	CharNameClickX1 = 460
-	CharNameClickX2 = 820
-	CharNameClickY1 = 560
-	CharNameClickY2 = 600
+	GameVersionBtnX       = 1225
+	GameVersionBtnY       = 620
+	GameVersionDLCHoverX  = 1010
+	GameVersionDLCHoverY  = 598
+	GameVersionDLCCheckX  = 1021
+	GameVersionDLCCheckY  = 573
+	GameversionWarlockX   = 1110
+	GameversionWarlockY   = 595
+	GameversionExpansionX = 1110
+	GameversionExpansionY = 585
 
-	CharLadderBtnX           = 570
-	CharLadderBtnY           = 620
-	CharHardcoreBtnX         = 640
-	CharHardcoreBtnY         = 620
-	CharExpansionBtnX        = 710
-	CharExpansionBtnY        = 620
-	CharOfflineHardcoreBtnX  = 605
-	CharOfflineExpansionBtnX = 675
+	CharNameInputX = 600
+	CharNameInputY = 600
 
-	CharCreateNewBtnX = 1125
-	CharCreateNewBtnY = 640
+	CharLadderBtnX   = 620
+	CharLadderBtnY   = 640
+	CharHardcoreBtnX = 660
+	CharHardcoreBtnY = 640
 
-	CharAmazonX = 310
-	CharAmazonY = 470
+	CharOfflineHardcoreBtnX  = 640
+	CharOfflineExpansionBtnX = 640
 
-	CharAssassinX = 420
-	CharAssassinY = 470
+	CharCreateNewBtnX = 1150
+	CharCreateNewBtnY = 625
 
-	CharNecroX = 530
-	CharNecroY = 470
+	CharAmazonX = 220
+	CharAmazonY = 360
 
-	CharBarbX = 640
-	CharBarbY = 470
+	CharAssassinX = 340
+	CharAssassinY = 360
 
-	CharPallyX = 750
-	CharPallyY = 470
+	CharNecroX = 450
+	CharNecroY = 360
 
-	CharSorcX = 860
-	CharSorcY = 470
+	CharBarbX = 570
+	CharBarbY = 360
 
-	CharDruidX = 970
-	CharDruidY = 470
+	CharPallyX = 710
+	CharPallyY = 360
+
+	CharSorcX = 830
+	CharSorcY = 360
+
+	CharWarlockX = 940
+	CharWarlockY = 360
+
+	CharDruidX = 1100
+	CharDruidY = 360
 )

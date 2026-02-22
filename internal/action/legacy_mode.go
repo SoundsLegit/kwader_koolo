@@ -45,9 +45,8 @@ func enableLegacyMode(ctx *context.Status, closeMiniPanel bool) bool {
 		return false
 	}
 
-	// Requires PR #576 (Data.ExpChar + Data.IsDLC), comment can be removed afterwards
+	// Prevent toggeling legacy mode for DLC character (without logging)
 	if ctx.Data.IsDLC() {
-		ctx.Logger.Debug("Skipping legacy mode switch for DLC character")
 		return false
 	}
 

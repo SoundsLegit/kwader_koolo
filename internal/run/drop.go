@@ -220,7 +220,9 @@ func (d Drop) finalizeDropSession(ctx *context.Status) {
 }
 
 func (d Drop) ensureCharacterSelection(ctx *context.Status) error {
-	const maxRetries = 15
+	// Keep a longer timeout than regular menu polling because Drop can be triggered
+	// while client state is still transitioning (splash/login/loading overlays).
+	const maxRetries = 120
 
 	for i := 0; i < maxRetries; i++ {
 		ctx.RefreshGameData()
@@ -251,7 +253,14 @@ func (d Drop) ensureCharacterSelection(ctx *context.Status) error {
 			continue
 		}
 
-		ctx.Logger.Debug("Drop: Waiting for known state...", "attempt", i+1)
+		// Match normal startup flow: click through splash/login states
+		// (e.g. "Press Any Key") to reach character selection.
+		ctx.HID.Click(game.LeftButton, 100, 100)
+
+		attempt := i + 1
+		if attempt <= 3 || attempt%10 == 0 || attempt == maxRetries {
+			ctx.Logger.Debug("Drop: waiting for known state while reaching character selection", "attempt", attempt, "maxAttempts", maxRetries)
+		}
 		utils.Sleep(500)
 	}
 	return fmt.Errorf("Drop: failed to reach character selection screen after %d attempts", maxRetries)
@@ -638,6 +647,10 @@ func (d Drop) prepareForLobbyJoin(ctx *context.Status) error {
 		return nil
 	}
 
+	if err := d.ensureCharacterSelection(ctx); err != nil {
+		return fmt.Errorf("Drop: failed to reach character selection before lobby join: %w", err)
+	}
+
 	if err := d.ensureOnlineForDrop(ctx); err != nil {
 		return err
 	}
@@ -845,6 +858,11 @@ func (d Drop) ensureStashOpen(ctx *context.Status) error {
 		}
 
 		utils.PingSleep(utils.Medium, 100)
+		ctx.RefreshGameData()
+		if ctx.Data.OpenMenus.Stash {
+			return nil
+		}
+
 	}
 
 	ctx.RefreshGameData()

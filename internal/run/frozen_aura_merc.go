@@ -60,13 +60,6 @@ func (fam FrozenAuraMerc) Run(parameters *RunParameters) error {
 		return err
 	}
 
-	// merc list works only in legacy mode
-	if !fam.ctx.Data.LegacyGraphics {
-		fam.ctx.Logger.Info("Switching to legacy mode to hire merc")
-		fam.ctx.HID.PressKey(fam.ctx.Data.KeyBindings.LegacyToggle.Key1[0])
-		utils.Sleep(500)
-	}
-
 	fam.ctx.Logger.Info("Interacting with mercenary NPC")
 	if err := action.InteractNPC(town.GetTownByArea(fam.ctx.Data.PlayerUnit.Area).MercContractorNPC()); err != nil {
 		return err
@@ -100,12 +93,6 @@ func (fam FrozenAuraMerc) Run(parameters *RunParameters) error {
 	fam.ctx.HID.KeySequence(keySequence...)
 
 	fam.ctx.CharacterCfg.Character.ShouldHireAct2MercFrozenAura = false
-
-	if !fam.ctx.CharacterCfg.ClassicMode && fam.ctx.Data.LegacyGraphics {
-		fam.ctx.Logger.Info("Switching back to non-legacy mode")
-		fam.ctx.HID.PressKey(fam.ctx.Data.KeyBindings.LegacyToggle.Key1[0])
-		utils.Sleep(500)
-	}
 
 	if err := config.SaveSupervisorConfig(fam.ctx.CharacterCfg.ConfigFolderName, fam.ctx.CharacterCfg); err != nil {
 		fam.ctx.Logger.Error(fmt.Sprintf("Failed to save character configuration: %s", err.Error()))

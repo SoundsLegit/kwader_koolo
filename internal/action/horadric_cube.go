@@ -58,19 +58,28 @@ func CubeAddItems(items ...data.Item) error {
 				SwitchStashTab(1)
 			case item.LocationSharedStash:
 				SwitchStashTab(nwIt.Location.Page + 1)
-			case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
-				// DLC tabs are accessed through stash UI (page navigation)
-				// GemsTab, MaterialsTab, and RunesTab appear after shared stash pages
-				// For DLC with 5 shared pages, tabs would be at pages 7, 8, 9
-				// This requires proper tab detection - for now, switch to shared stash page 1
-				// and let the UI handle navigation to DLC tabs
-				SwitchStashTab(2) // Start at first shared stash page
+			case item.LocationGemsTab:
+				SwitchStashTab(StashTabGems)
+			case item.LocationMaterialsTab:
+				SwitchStashTab(StashTabMaterials)
+			case item.LocationRunesTab:
+				SwitchStashTab(StashTabRunes)
 			}
 		}
 
-		ctx.Logger.Debug("Item found on the stash, picking it up", slog.String("Item", string(nwIt.Name)))
-		screenPos := ui.GetScreenCoordsForItem(nwIt)
+		ctx.Logger.Debug("Item found on the stash, picking it up",
+			slog.String("Item", string(nwIt.Name)),
+			slog.String("Location", string(nwIt.Location.LocationType)),
+			slog.Int("MemPosX", nwIt.Position.X),
+			slog.Int("MemPosY", nwIt.Position.Y),
+		)
 
+		screenPos := ui.GetScreenCoordsForItem(nwIt)
+		ctx.Logger.Debug("Clicking item at computed screen position",
+			slog.String("Item", string(nwIt.Name)),
+			slog.Int("ScreenX", screenPos.X),
+			slog.Int("ScreenY", screenPos.Y),
+		)
 		ctx.HID.ClickWithModifier(game.LeftButton, screenPos.X, screenPos.Y, game.CtrlKey)
 		utils.Sleep(300)
 	}
@@ -85,17 +94,61 @@ func CubeAddItems(items ...data.Item) error {
 		return err
 	}
 
+	// Refresh game data so items reflect their current inventory positions,
+	// not their original stash/DLC tab positions from before the pickup phase.
+	ctx.RefreshGameData()
+
+	// Track DLC items already matched by their new UnitID to avoid matching
+	// the same inventory item twice when multiple identical items are needed
+	// (e.g., 3x PerfectAmethyst for a grand charm reroll).
+	usedUnitIDs := make(map[data.UnitID]struct{})
+
 	for _, itm := range items {
+		var found *data.Item
+
+		// DLC tab items (gems, runes, materials) get new UnitIDs when moved to
+		// inventory, so we must match by Name in inventory instead of by UnitID.
+		isDLC := itm.Location.LocationType == item.LocationGemsTab ||
+			itm.Location.LocationType == item.LocationMaterialsTab ||
+			itm.Location.LocationType == item.LocationRunesTab
+
 		for _, updatedItem := range ctx.Data.Inventory.AllItems {
-			if itm.UnitID == updatedItem.UnitID {
-				ctx.Logger.Debug("Moving Item to the Horadric Cube", slog.String("Item", string(itm.Name)))
-
-				screenPos := ui.GetScreenCoordsForItem(updatedItem)
-
-				ctx.HID.ClickWithModifier(game.LeftButton, screenPos.X, screenPos.Y, game.CtrlKey)
-				utils.Sleep(500)
+			if isDLC {
+				if _, used := usedUnitIDs[updatedItem.UnitID]; used {
+					continue
+				}
+				if updatedItem.Name == itm.Name && updatedItem.Location.LocationType == item.LocationInventory {
+					found = &updatedItem
+					break
+				}
+			} else {
+				if updatedItem.UnitID == itm.UnitID {
+					found = &updatedItem
+					break
+				}
 			}
 		}
+
+		if found != nil {
+			usedUnitIDs[found.UnitID] = struct{}{}
+		} else {
+			ctx.Logger.Warn("Item not found in inventory for cube",
+				slog.String("Item", string(itm.Name)),
+				slog.Int("UnitID", int(itm.UnitID)),
+			)
+			continue
+		}
+
+		ctx.Logger.Debug("Moving Item to the Horadric Cube",
+			slog.String("Item", string(found.Name)),
+			slog.String("Location", string(found.Location.LocationType)),
+			slog.Int("PosX", found.Position.X),
+			slog.Int("PosY", found.Position.Y),
+		)
+
+		screenPos := ui.GetScreenCoordsForItem(*found)
+		ctx.HID.ClickWithModifier(game.LeftButton, screenPos.X, screenPos.Y, game.CtrlKey)
+		utils.Sleep(500)
 	}
 
 	return nil

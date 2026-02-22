@@ -304,8 +304,12 @@ func PrettyRunewordBaseTypeLabel(code string) string {
 		return "Armor"
 	case item.TypeShield:
 		return "Shield"
+	case item.TypeVoodooHeads:
+		return "Necromancer Head"
 	case item.TypeAuricShields:
 		return "Paladin Shield"
+	case item.TypeGrimoire:
+		return "Grimoire"
 	case item.TypeAmazonItem, item.TypeAmazonBow:
 		return "Amazon Weapon"
 	case item.TypeBow:

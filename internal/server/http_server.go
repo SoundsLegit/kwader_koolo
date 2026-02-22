@@ -2805,6 +2805,7 @@ func (s *HttpServer) characterSettings(w http.ResponseWriter, r *http.Request) {
 		cfg.Game.InteractWithChests = r.Form.Has("interactWithChests")
 		cfg.Game.InteractWithSuperChests = r.Form.Has("interactWithSuperChests")
 		cfg.Game.StopLevelingAt, _ = strconv.Atoi(r.Form.Get("stopLevelingAt"))
+		cfg.Game.GameVersion = config.NormalizeGameVersion(r.Form.Get("gameVersion"))
 		cfg.Game.IsNonLadderChar = r.Form.Has("isNonLadderChar")
 		cfg.Game.IsHardCoreChar = r.Form.Has("isHardCoreChar")
 
