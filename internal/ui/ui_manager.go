@@ -66,7 +66,12 @@ func GetScreenCoordsForInventoryPosition(pos data.Position, loc item.LocationTyp
 
 func getScreenCoordsForItem(itm data.Item) data.Position {
 	switch itm.Location.LocationType {
-	case item.LocationVendor, item.LocationStash, item.LocationSharedStash, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+	case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+		if pos, ok := GetDLCTabScreenCoords(itm.Name); ok {
+			return pos
+		}
+		return data.Position{}
+	case item.LocationVendor, item.LocationStash, item.LocationSharedStash:
 		x := topCornerVendorWindowX + itm.Position.X*itemBoxSize + (itemBoxSize / 2)
 		y := topCornerVendorWindowY + itm.Position.Y*itemBoxSize + (itemBoxSize / 2)
 
@@ -86,7 +91,9 @@ func getScreenCoordsForItem(itm data.Item) data.Position {
 
 func getScreenCoordsForInventoryPosition(pos data.Position, loc item.LocationType) data.Position {
 	switch loc {
-	case item.LocationVendor, item.LocationStash, item.LocationSharedStash, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+	case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+		return data.Position{}
+	case item.LocationVendor, item.LocationStash, item.LocationSharedStash:
 		x := topCornerVendorWindowX + pos.X*itemBoxSize + (itemBoxSize / 2)
 		y := topCornerVendorWindowY + pos.Y*itemBoxSize + (itemBoxSize / 2)
 
@@ -106,7 +113,12 @@ func getScreenCoordsForInventoryPosition(pos data.Position, loc item.LocationTyp
 
 func getScreenCoordsForItemClassic(itm data.Item) data.Position {
 	switch itm.Location.LocationType {
-	case item.LocationVendor, item.LocationStash, item.LocationSharedStash, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+	case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+		if pos, ok := GetDLCTabScreenCoords(itm.Name); ok {
+			return pos
+		}
+		return data.Position{}
+	case item.LocationVendor, item.LocationStash, item.LocationSharedStash:
 		x := topCornerVendorWindowXClassic + itm.Position.X*itemBoxSizeClassic + (itemBoxSizeClassic / 2)
 		y := topCornerVendorWindowYClassic + itm.Position.Y*itemBoxSizeClassic + (itemBoxSizeClassic / 2)
 
@@ -126,7 +138,9 @@ func getScreenCoordsForItemClassic(itm data.Item) data.Position {
 
 func getScreenCoordsForInventoryPositionClassic(pos data.Position, loc item.LocationType) data.Position {
 	switch loc {
-	case item.LocationVendor, item.LocationStash, item.LocationSharedStash, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+	case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+		return data.Position{}
+	case item.LocationVendor, item.LocationStash, item.LocationSharedStash:
 		x := topCornerVendorWindowXClassic + pos.X*itemBoxSizeClassic + (itemBoxSizeClassic / 2)
 		y := topCornerVendorWindowYClassic + pos.Y*itemBoxSizeClassic + (itemBoxSizeClassic / 2)
 

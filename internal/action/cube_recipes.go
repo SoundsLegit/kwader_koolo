@@ -415,12 +415,19 @@ func CubeRecipes() error {
 		return nil
 	}
 
+	// Leveling can enable cube recipes before acquiring the cube.
+	// Skip recipe processing until the Horadric Cube is available.
+	if _, hasCube := ctx.Data.Inventory.Find("HoradricCube", item.LocationInventory, item.LocationStash); !hasCube {
+		ctx.Logger.Debug("Cube recipes enabled but Horadric Cube not found, skipping")
+		return nil
+	}
+
 	// Build location list for material search - include DLC tabs if character has DLC
 	locations := []item.LocationType{item.LocationStash, item.LocationSharedStash}
 	if ctx.Data.IsDLC() {
 		locations = append(locations, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab)
 	}
-	itemsInStash := ctx.Data.Inventory.ByLocation(locations...)
+	itemsInStash := FilterDLCGhostItems(ctx.Data.Inventory.ByLocation(locations...))
 	for _, recipe := range Recipes {
 		// Check if the current recipe is Enabled
 		if !slices.Contains(ctx.CharacterCfg.CubeRecipes.EnabledRecipes, recipe.Name) {
@@ -539,7 +546,7 @@ func hasItemsForRecipe(ctx *context.Status, recipe CubeRecipe) ([]data.Item, boo
 	if ctx.Data.IsDLC() {
 		locations = append(locations, item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab)
 	}
-	items := ctx.Data.Inventory.ByLocation(locations...)
+	items := FilterDLCGhostItems(ctx.Data.Inventory.ByLocation(locations...))
 
 	if strings.Contains(recipe.Name, "Add Sockets to") {
 		return hasItemsForSocketRecipe(ctx, recipe, items)
@@ -557,33 +564,40 @@ func hasItemsForRecipe(ctx *context.Status, recipe CubeRecipe) ([]data.Item, boo
 
 	itemsForRecipe := []data.Item{}
 
-	// Iterate over the items in our stash to see if we have the items for the recipie.
-	for _, item := range items {
-		if count, ok := recipeItems[string(item.Name)]; ok {
+	// Iterate over the items in our stash to see if we have the items for the recipe.
+	for _, itm := range items {
+		if count, ok := recipeItems[string(itm.Name)]; ok {
 
 			// Let's make sure we don't use an item we don't want to. Add more if needed (depending on the recipes we have)
-			if item.Name == "Jewel" {
-				if _, result := ctx.CharacterCfg.Runtime.Rules.EvaluateAll(item); result == nip.RuleResultFullMatch {
+			if itm.Name == "Jewel" {
+				if _, result := ctx.CharacterCfg.Runtime.Rules.EvaluateAll(itm); result == nip.RuleResultFullMatch {
 					continue
 				}
 			}
 
-			itemsForRecipe = append(itemsForRecipe, item)
+			// DLC stacked items: one entry can satisfy multiple recipe slots
+			// (e.g., a FlawlessDiamond stack of 5 satisfies 3x FlawlessDiamond).
+			// Each Ctrl+click in CubeAddItems takes one from the stack.
+			availableQty := isDLCStackedQuantity(itm)
+			satisfies := min(availableQty, count)
 
-			// Check if we now have exactly the needed count before decrementing
-			count -= 1
+			for i := 0; i < satisfies; i++ {
+				itemsForRecipe = append(itemsForRecipe, itm)
+			}
+
+			count -= satisfies
 			if count == 0 {
-				delete(recipeItems, string(item.Name))
+				delete(recipeItems, string(itm.Name))
 				if len(recipeItems) == 0 {
 					return itemsForRecipe, true
 				}
 			} else {
-				recipeItems[string(item.Name)] = count
+				recipeItems[string(itm.Name)] = count
 			}
 		}
 	}
 
-	// We don't have all the items for the recipie.
+	// We don't have all the items for the recipe.
 	return nil, false
 }
 
@@ -626,8 +640,14 @@ func hasItemsForSocketRecipe(ctx *context.Status, recipe CubeRecipe, items []dat
 		itemName := string(itm.Name)
 
 		if count, ok := recipeItems[itemName]; ok {
-			itemsForRecipe = append(itemsForRecipe, itm)
-			count--
+			// DLC stacked items can satisfy multiple recipe slots
+			availableQty := isDLCStackedQuantity(itm)
+			satisfies := min(availableQty, count)
+
+			for i := 0; i < satisfies; i++ {
+				itemsForRecipe = append(itemsForRecipe, itm)
+			}
+			count -= satisfies
 			if count == 0 {
 				delete(recipeItems, itemName)
 			} else {
@@ -724,7 +744,14 @@ func hasItemsForGrandCharmReroll(ctx *context.Status, items []data.Item) ([]data
 				(ctx.CharacterCfg.CubeRecipes.SkipPerfectRubies && itm.Name == "PerfectRuby") {
 				continue
 			}
-			perfectGems = append(perfectGems, itm)
+			// DLC stacked gems: one entry can fill multiple perfect gem slots
+			needed := 3 - len(perfectGems)
+			availableQty := isDLCStackedQuantity(itm)
+			satisfies := min(availableQty, needed)
+
+			for i := 0; i < satisfies; i++ {
+				perfectGems = append(perfectGems, itm)
+			}
 		}
 
 		if grandCharm.Name != "" && len(perfectGems) == 3 {
@@ -733,6 +760,20 @@ func hasItemsForGrandCharmReroll(ctx *context.Status, items []data.Item) ([]data
 	}
 
 	return nil, false
+}
+
+// isDLCStackedQuantity returns how many recipe slots a single item entry can
+// satisfy. For DLC tab items it returns StackedQuantity; for regular items it
+// returns 1 (each entry is a separate physical item).
+func isDLCStackedQuantity(itm data.Item) int {
+	switch itm.Location.LocationType {
+	case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+		if itm.StackedQuantity > 0 {
+			return itm.StackedQuantity
+		}
+		return 0 // ghost entry, should have been filtered
+	}
+	return 1
 }
 
 func isPerfectGem(item data.Item) bool {

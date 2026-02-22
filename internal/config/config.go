@@ -36,6 +36,11 @@ var (
 	nipRulesCache    = make(map[string]nip.Rules)
 )
 
+const (
+	GameVersionReignOfTheWarlock = "reign_of_the_warlock"
+	GameVersionExpansion         = "expansion"
+)
+
 type KooloCfg struct {
 	Debug struct {
 		Log                       bool `yaml:"log"`
@@ -381,6 +386,8 @@ type CharacterCfg struct {
 		InteractWithChests      bool                  `yaml:"interactWithChests"`
 		InteractWithSuperChests bool                  `yaml:"interactWithSuperChests"`
 		StopLevelingAt          int                   `yaml:"stopLevelingAt"`
+		GameVersion             string                `yaml:"gameVersion"`
+		DLCEnabled              bool                  `yaml:"dlcEnabled"`
 		IsNonLadderChar         bool                  `yaml:"isNonLadderChar"`
 		IsHardCoreChar          bool                  `yaml:"isHardCoreChar"`
 		ClearTPArea             bool                  `yaml:"clearTPArea"`
@@ -662,6 +669,7 @@ func Load() error {
 			charCfg.Game.Andariel.UseAntidotes = true
 		}
 		charCfg.Game.Andariel.UseAntidoesDeprecated = false
+		charCfg.Game.GameVersion = NormalizeGameVersion(charCfg.Game.GameVersion)
 
 		charCfg.ConfigFolderName = entry.Name()
 
@@ -719,6 +727,17 @@ func Load() error {
 	}
 
 	return nil
+}
+
+func NormalizeGameVersion(version string) string {
+	switch strings.ToLower(strings.TrimSpace(version)) {
+	case GameVersionReignOfTheWarlock, "reignofthewarlock", "reign of the warlock", "warlock":
+		return GameVersionReignOfTheWarlock
+	case GameVersionExpansion:
+		return GameVersionExpansion
+	default:
+		return GameVersionReignOfTheWarlock
+	}
 }
 
 func sanitizeDiscordConfig(cfg *KooloCfg) {

@@ -102,13 +102,6 @@ func (a Leveling) act2() error {
 			return err
 		}
 
-		// merc list works only in legacy mode
-		if !a.ctx.Data.LegacyGraphics {
-			a.ctx.Logger.Info("Switching to legacy mode to hire merc")
-			a.ctx.HID.PressKey(a.ctx.Data.KeyBindings.LegacyToggle.Key1[0])
-			utils.Sleep(500)
-		}
-
 		a.ctx.Logger.Info("Interacting with mercenary NPC")
 		if err := action.InteractNPC(town.GetTownByArea(a.ctx.Data.PlayerUnit.Area).MercContractorNPC()); err != nil {
 			return err
@@ -142,12 +135,6 @@ func (a Leveling) act2() error {
 		a.ctx.HID.KeySequence(keySequence...)
 
 		a.ctx.CharacterCfg.Character.ShouldHireAct2MercFrozenAura = false
-
-		if !a.ctx.CharacterCfg.ClassicMode && a.ctx.Data.LegacyGraphics {
-			a.ctx.Logger.Info("Switching back to non-legacy mode")
-			a.ctx.HID.PressKey(a.ctx.Data.KeyBindings.LegacyToggle.Key1[0])
-			utils.Sleep(500)
-		}
 
 		if err := config.SaveSupervisorConfig(a.ctx.CharacterCfg.ConfigFolderName, a.ctx.CharacterCfg); err != nil {
 			a.ctx.Logger.Error(fmt.Sprintf("Failed to save character configuration: %s", err.Error()))

@@ -44,6 +44,15 @@ var Runewords = []Runeword{
 		BaseSortOrder: []stat.ID{stat.Defense},
 	},
 	{
+		Name:          item.RunewordAuthority,
+		Runes:         []string{"HelRune", "ShaelRune", "RalRune"},
+		BaseItemTypes: []string{item.TypeArmor},
+		Rolls: []RunewordStatRolls{
+			{Min: 40, Max: 60, StatID: stat.EnhancedDamage},
+		},
+		BaseSortOrder: []stat.ID{stat.Defense},
+	},
+	{
 		Name:          item.RunewordBeast,
 		Runes:         []string{"BerRune", "TirRune", "UmRune", "MalRune", "LumRune"},
 		BaseItemTypes: []string{item.TypeAxe, item.TypeHammer, item.TypeScepter},
@@ -164,6 +173,17 @@ var Runewords = []Runeword{
 			{Min: 40, Max: 60, StatID: stat.PoisonResist},
 		},
 		AllowReroll:   false,
+		BaseSortOrder: []stat.ID{stat.Defense},
+	},
+	{
+		Name:          item.RunewordCoven,
+		Runes:         []string{"IstRune", "RalRune", "IoRune"},
+		BaseItemTypes: []string{item.TypeHelm, item.TypePelt, item.TypePrimalHelm, item.TypeCirclet},
+		Rolls: []RunewordStatRolls{
+			{Min: 30, Max: 50, StatID: stat.EnhancedDefense},
+			{Min: 1, Max: 5, StatID: stat.LifeAfterEachKill},
+			{Min: 26, Max: 40, StatID: stat.MagicFind},
+		},
 		BaseSortOrder: []stat.ID{stat.Defense},
 	},
 	{
@@ -758,6 +778,18 @@ var Runewords = []Runeword{
 		AllowReroll: true,
 	},
 	{
+		Name:          item.RunewordRitual,
+		Runes:         []string{"AmnRune", "ShaelRune", "OhmRune"},
+		BaseItemTypes: []string{item.TypeKnife},
+		Rolls: []RunewordStatRolls{
+			{Min: 250, Max: 320, StatID: stat.EnhancedDamageMin},
+			{Min: 150, Max: 250, StatID: stat.DemonDamagePercent},
+			{Min: 200, Max: 260, StatID: stat.AttackRatingPercent},
+			{Min: 3, Max: 5, StatID: stat.LifeAfterEachKill},
+		},
+		BaseSortOrder: []stat.ID{stat.MinDamage},
+	},
+	{
 		Name:          item.RunewordSanctuary,
 		Runes:         []string{"KoRune", "KoRune", "MalRune"},
 		BaseItemTypes: []string{item.TypeShield, item.TypeAuricShields},
@@ -864,6 +896,21 @@ var Runewords = []Runeword{
 		BaseItemTypes: []string{item.TypeAxe, item.TypeWand, item.TypeClub, item.TypeScepter, item.TypeMace, item.TypeHammer, item.TypeSword, item.TypeKnife, item.TypeSpear, item.TypePolearm, item.TypeStaff, item.TypeHandtoHand, item.TypeHandtoHand2},
 	},
 	{
+		Name:          item.RunewordVigilance,
+		Runes:         []string{"DolRune", "GulRune"},
+		BaseItemTypes: []string{item.TypeGrimoire, item.TypeShield, item.TypeVoodooHeads, item.TypeAuricShields},
+		Rolls: []RunewordStatRolls{
+			{Min: 20, Max: 40, StatID: stat.MaxLife},
+			{Min: 20, Max: 40, StatID: stat.MaxMana},
+			{Min: 25, Max: 35, StatID: stat.FireResist},
+			{Min: 25, Max: 35, StatID: stat.ColdResist},
+			{Min: 25, Max: 35, StatID: stat.LightningResist},
+			{Min: 25, Max: 35, StatID: stat.PoisonResist},
+			{Min: 75, Max: 100, StatID: stat.EnhancedDefense},
+		},
+		BaseSortOrder: []stat.ID{stat.Defense},
+	},
+	{
 		Name:          item.RunewordVoiceOfReason,
 		Runes:         []string{"LemRune", "KoRune", "ElRune", "EldRune"},
 		BaseItemTypes: []string{item.TypeSword, item.TypeMace},
@@ -872,6 +919,18 @@ var Runewords = []Runeword{
 			{Min: 355, Max: 375, StatID: stat.UndeadDamagePercent},
 		},
 		AllowReroll: true,
+	},
+	{
+		Name:          item.RunewordVoid,
+		Runes:         []string{"ThulRune", "ZodRune", "IstRune"},
+		BaseItemTypes: []string{item.TypeKnife},
+		Rolls: []RunewordStatRolls{
+			{Min: 8, Max: 12, StatID: stat.Strength},
+			{Min: 8, Max: 12, StatID: stat.Energy},
+			{Min: 8, Max: 12, StatID: stat.Dexterity},
+			{Min: 8, Max: 12, StatID: stat.Vitality},
+		},
+		BaseSortOrder: []stat.ID{stat.MinDamage},
 	},
 	{
 		Name:          item.RunewordWealth,

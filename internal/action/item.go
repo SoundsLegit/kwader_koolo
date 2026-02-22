@@ -5,6 +5,7 @@ import (
 
 	"github.com/hectorgimenez/d2go/pkg/data"
 	"github.com/hectorgimenez/d2go/pkg/data/item"
+	"github.com/hectorgimenez/d2go/pkg/data/stat"
 	"github.com/hectorgimenez/d2go/pkg/nip"
 	"github.com/hectorgimenez/koolo/internal/action/step"
 	"github.com/hectorgimenez/koolo/internal/context"
@@ -14,30 +15,33 @@ import (
 )
 
 func doesExceedQuantity(rule nip.Rule) bool {
-	ctx := context.Get()
-	ctx.SetLastAction("doesExceedQuantity")
+    ctx := context.Get()
+    ctx.SetLastAction("doesExceedQuantity")
 
-	stashItems := ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash)
+    stashItems := ctx.Data.Inventory.ByLocation(
+        item.LocationStash,
+        item.LocationSharedStash,
+        item.LocationRunesTab,
+        item.LocationGemsTab,
+        item.LocationMaterialsTab,
+    )
+    stashItems = FilterDLCGhostItems(stashItems)
 
-	maxQuantity := rule.MaxQuantity()
-	if maxQuantity == 0 {
-		return false
-	}
+    maxQuantity := rule.MaxQuantity()
+    if maxQuantity == 0 {
+        return false
+    }
 
-	if maxQuantity == 0 {
-		return false
-	}
+    matchedItemsInStash := 0
 
-	matchedItemsInStash := 0
+    for _, stashItem := range stashItems {
+        res, _ := rule.Evaluate(stashItem)
+        if res == nip.RuleResultFullMatch {
+            matchedItemsInStash += GetItemQuantity(stashItem)
+        }
+    }
 
-	for _, stashItem := range stashItems {
-		res, _ := rule.Evaluate(stashItem)
-		if res == nip.RuleResultFullMatch {
-			matchedItemsInStash += 1
-		}
-	}
-
-	return matchedItemsInStash >= maxQuantity
+    return matchedItemsInStash >= maxQuantity
 }
 
 func DropMouseItem() {
@@ -456,4 +460,34 @@ func DrinkAllPotionsInInventory() {
 	}
 
 	step.CloseAllMenus()
+}
+
+func GetItemQuantity(itm data.Item) int {
+	if qty, found := itm.FindStat(stat.Quantity, 0); found && qty.Value > 0 {
+		return qty.Value
+	}
+	if itm.StackedQuantity > 0 {
+		return itm.StackedQuantity
+	}
+	return 1
+}
+
+// FilterDLCGhostItems removes DLC tab items that have StackedQuantity == 0.
+// The game keeps empty slot entries in DLC tabs after all copies are consumed;
+// these ghost items must be excluded to prevent the bot from trying to pick up
+// non-existent items.
+func FilterDLCGhostItems(items []data.Item) []data.Item {
+	filtered := make([]data.Item, 0, len(items))
+	for _, itm := range items {
+		switch itm.Location.LocationType {
+		case item.LocationGemsTab, item.LocationMaterialsTab, item.LocationRunesTab:
+			// DLC tab items are always stackable; StackedQuantity == 0 means
+			// the slot is empty (ghost entry the game keeps in memory).
+			if itm.StackedQuantity <= 0 {
+				continue
+			}
+		}
+		filtered = append(filtered, itm)
+	}
+	return filtered
 }

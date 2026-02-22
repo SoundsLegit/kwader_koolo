@@ -1,0 +1,42 @@
+name: "Notify Open PRs of Repo Deletion"
+
+on:
+  # Manual trigger is best for a one-off notification like this
+  workflow_dispatch:
+
+permissions:
+  pull-requests: write
+  issues: write
+
+jobs:
+  notify-prs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v7
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            // The improved notification message
+            const WARNING_MESSAGE = "⚠️ **IMPORTANT NOTICE** ⚠️\n\nDue to an upcoming restructuring process, this repository will be deleted and re-created. \n\n**Please ensure any unsaved work in this Pull Request is backed up locally.** \n\nThis repository is scheduled for deletion 24 hours after this comment. Thank you for your understanding.";
+
+            // 1. Fetch all open Pull Requests
+            const prs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100
+            });
+
+            console.log(`Found ${prs.length} open PR(s) to notify.`);
+
+            // 2. Loop through each PR and add the comment
+            for (const pr of prs) {
+              console.log(`Adding warning comment to PR #${pr.number}`);
+              
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: pr.number,
+                body: WARNING_MESSAGE
+              });
+            }

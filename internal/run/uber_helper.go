@@ -247,7 +247,7 @@ func hasOrgans(ctx *context.Status) bool {
 	hornCount := 0
 	eyeCount := 0
 
-	for _, itm := range ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab) {
+	for _, itm := range action.FilterDLCGhostItems(ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab)) {
 		switch string(itm.Name) {
 		case "MephistosBrain":
 			brainCount++
@@ -267,7 +267,7 @@ func getOrganSet(ctx *context.Status) ([]data.Item, error) {
 	hornFound := false
 	eyeFound := false
 
-	for _, itm := range ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab) {
+	for _, itm := range action.FilterDLCGhostItems(ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab)) {
 		if !brainFound && string(itm.Name) == "MephistosBrain" {
 			organs = append(organs, itm)
 			brainFound = true
@@ -298,9 +298,14 @@ func checkForRejuv(ctx *context.Status) error {
 
 	rejuvCount := 0
 	var rejuvsInStash []data.Item
-	for _, itm := range ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab) {
+	for _, itm := range action.FilterDLCGhostItems(ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab)) {
 		if itm.IsRejuvPotion() {
-			rejuvCount++
+			// DLC stacked items: count actual quantity, not just entries
+			qty := 1
+			if itm.Location.LocationType == item.LocationMaterialsTab && itm.StackedQuantity > 0 {
+				qty = itm.StackedQuantity
+			}
+			rejuvCount += qty
 			rejuvsInStash = append(rejuvsInStash, itm)
 		}
 	}
@@ -323,23 +328,41 @@ func checkForRejuv(ctx *context.Status) error {
 		rejuvsToMove = rejuvCount
 	}
 
-	for i := 0; i < rejuvsToMove; i++ {
-		rejuv := rejuvsInStash[i]
+	moved := 0
+	for _, rejuv := range rejuvsInStash {
+		if moved >= rejuvsToMove {
+			break
+		}
 
-		if rejuv.Location.LocationType == item.LocationStash {
+		switch rejuv.Location.LocationType {
+		case item.LocationStash:
 			action.SwitchStashTab(1)
-		} else if rejuv.Location.LocationType == item.LocationSharedStash {
+		case item.LocationSharedStash:
 			action.SwitchStashTab(rejuv.Location.Page + 1)
+		case item.LocationMaterialsTab:
+			action.SwitchStashTab(action.StashTabMaterials)
 		}
 		utils.Sleep(300)
 		ctx.RefreshGameData()
 		utils.Sleep(150)
 
+		// For stacked DLC items, each Ctrl+click takes one from the stack
+		clicksNeeded := 1
+		if rejuv.Location.LocationType == item.LocationMaterialsTab && rejuv.StackedQuantity > 0 {
+			clicksNeeded = rejuv.StackedQuantity
+			if clicksNeeded > rejuvsToMove-moved {
+				clicksNeeded = rejuvsToMove - moved
+			}
+		}
+
 		stashCoords := ui.GetScreenCoordsForItem(rejuv)
-		ctx.HID.ClickWithModifier(game.LeftButton, stashCoords.X, stashCoords.Y, game.CtrlKey)
-		utils.Sleep(500)
-		ctx.RefreshGameData()
-		utils.Sleep(150)
+		for c := 0; c < clicksNeeded; c++ {
+			ctx.HID.ClickWithModifier(game.LeftButton, stashCoords.X, stashCoords.Y, game.CtrlKey)
+			utils.Sleep(500)
+			ctx.RefreshGameData()
+			utils.Sleep(150)
+		}
+		moved += clicksNeeded
 	}
 
 	if err := action.RefillBeltFromInventory(); err != nil {
@@ -358,14 +381,19 @@ func hasKeys(ctx *context.Status) bool {
 	destructionCount := 0
 	hateCount := 0
 
-	for _, itm := range ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab) {
+	for _, itm := range action.FilterDLCGhostItems(ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab)) {
+		// DLC stacked items: count actual quantity, not just entries
+		qty := 1
+		if itm.Location.LocationType == item.LocationMaterialsTab && itm.StackedQuantity > 0 {
+			qty = itm.StackedQuantity
+		}
 		switch string(itm.Name) {
 		case "KeyOfTerror":
-			terrorCount++
+			terrorCount += qty
 		case "KeyOfDestruction":
-			destructionCount++
+			destructionCount += qty
 		case "KeyOfHate":
-			hateCount++
+			hateCount += qty
 		}
 	}
 
@@ -378,7 +406,7 @@ func getKeySet(ctx *context.Status) ([]data.Item, error) {
 	destructionFound := false
 	hateFound := false
 
-	for _, itm := range ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab) {
+	for _, itm := range action.FilterDLCGhostItems(ctx.Data.Inventory.ByLocation(item.LocationStash, item.LocationSharedStash, item.LocationMaterialsTab)) {
 		if !terrorFound && string(itm.Name) == "KeyOfTerror" {
 			portalKeys = append(portalKeys, itm)
 			terrorFound = true

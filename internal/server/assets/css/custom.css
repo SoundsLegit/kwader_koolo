@@ -725,8 +725,33 @@
 }
 
 .ladder-toggle-group .non-ladder-checkbox-container {
-  margin-top: 0;
+  margin: 0;
   white-space: nowrap;
+}
+
+.character-create-row {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  flex-wrap: wrap;
+  margin-top: 0;
+  margin-bottom: 0.2rem;
+}
+
+.character-create-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--spacing-sm);
+  margin: 0;
+}
+
+.character-create-row .ladder-toggle-group {
+  margin-top: 0;
+}
+
+.character-create-help {
+  display: block;
+  margin-bottom: 5px;
 }
 
 /* ========================================
