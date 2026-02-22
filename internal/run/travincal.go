@@ -11,6 +11,7 @@ import (
 	"github.com/hectorgimenez/koolo/internal/character"
 	"github.com/hectorgimenez/koolo/internal/config"
 	"github.com/hectorgimenez/koolo/internal/context"
+	"github.com/hectorgimenez/koolo/internal/game"
 	"github.com/hectorgimenez/koolo/internal/utils"
 )
 
@@ -60,6 +61,48 @@ func (t *Travincal) Run(parameters *RunParameters) error {
 
 	//TODO This is temporary needed for barb because have no cta; isrebuffrequired not working for him. We have ActiveWeaponSlot in d2go ready for that
 	action.Buff()
+
+	// Blacklist the entrance to durance of hate level 1 to prevent accidental entry
+	entranceFound := false
+	for _, al := range t.ctx.Data.AdjacentLevels {
+		if al.Area == area.DuranceOfHateLevel1 {
+			entranceFound = true
+			// Get the exact entrance position
+			entranceWorldPos := al.Position
+			relativePos := t.ctx.Data.AreaData.Grid.RelativePosition(entranceWorldPos)
+
+			// Validate the entrance position is within grid bounds
+			if relativePos.X < 0 || relativePos.X >= t.ctx.Data.AreaData.Grid.Width ||
+				relativePos.Y < 0 || relativePos.Y >= t.ctx.Data.AreaData.Grid.Height {
+				t.ctx.Logger.Warn("Durance of Hate entrance is outside grid bounds", "worldPosition", entranceWorldPos, "gridPosition", relativePos)
+				break
+			}
+
+			// Mark a 3 unit radius area around the entrance as non-walkable (7x7 grid)
+			blacklistRadius := 3
+			blacklistedCount := 0
+			for dx := -blacklistRadius; dx <= blacklistRadius; dx++ {
+				for dy := -blacklistRadius; dy <= blacklistRadius; dy++ {
+					x := relativePos.X + dx
+					y := relativePos.Y + dy
+					if x >= 0 && x < t.ctx.Data.AreaData.Grid.Width &&
+						y >= 0 && y < t.ctx.Data.AreaData.Grid.Height {
+						t.ctx.Data.AreaData.Grid.Set(x, y, game.CollisionTypeNonWalkable)
+						blacklistedCount++
+					}
+				}
+			}
+			t.ctx.Logger.Debug("Successfully blacklisted Durance of Hate entrance",
+				"worldPosition", entranceWorldPos,
+				"gridPosition", relativePos,
+				"radius", blacklistRadius,
+				"tilesBlacklisted", blacklistedCount)
+			break
+		}
+	}
+	if !entranceFound {
+		t.ctx.Logger.Warn("Durance of Hate entrance not found in adjacent levels")
+	}
 
 	councilPosition := t.findCouncilPosition()
 
